@@ -517,57 +517,52 @@ class WindowPositionManager: NSObject, NSApplicationDelegate {
 func positionAndSizeWindow(terminalPosition: CGPoint, terminalSize: CGSize, shouldAnimate: Bool) {
   DispatchQueue.main.async {
     guard let window = NSApplication.shared.windows.first else {
-      print("Failed to find the application window or screen.")
+      print("Failed to find the application window.")
       return
     }
 
-    // terminalPosition is calculated relative to the height of the primaryScreen
-    guard let primaryScreen = NSScreen.screens.first(where: { $0.frame.origin.y == 0 }) else {
-      print("Failed to find the primary screen.")
-      return
-    }
-
-    // Get the saved window attachment position from UserDefaults
     let savedPosition = UserDefaults.standard.string(forKey: "windowAttachmentPosition") ?? "right"
     guard let attachmentPosition = WindowAttachmentPosition(rawValue: savedPosition) else {
       print("Invalid attachment position saved in UserDefaults.")
       return
     }
-    print("Saved position: \(savedPosition)")
 
-    // Calculate the new y position
-    // terminalPosition is relative to primaryScreen, not NSScreen.main
-    let screenHeight = primaryScreen.frame.height
-    let newYPosition = screenHeight - terminalPosition.y - terminalSize.height
-
-    // Calculate the new x position based on the attachmentPosition enum
-    let newXPosition: CGFloat
+    let requestedSide: AttachmentSide
     switch attachmentPosition {
     case .left:
-      newXPosition = terminalPosition.x - window.frame.width
+      requestedSide = .left
     case .right:
-      newXPosition = terminalPosition.x + terminalSize.width
+      requestedSide = .right
     case .float:
+      requestedSide = .float
+    }
+
+    let axTerminalFrame = CGRect(origin: terminalPosition, size: terminalSize)
+    guard let geometry = SystemAttachmentGeometryContext.current(),
+      let placement = geometry.finalPlacement(
+        axTerminalFrame: axTerminalFrame,
+        requestedSide: requestedSide,
+        shellMateWidth: window.frame.width)
+    else {
+      // Floating mode and invalid or unavailable display geometry intentionally produce no frame.
       return
     }
 
-    // Calculate the new position
-    let newPosition = CGPoint(x: newXPosition, y: newYPosition)
-    let newSize = CGSize(width: window.frame.width, height: terminalSize.height)
+    print(
+      "Attachment requested on \(placement.requestedSide.rawValue), placed on "
+        + "\(placement.effectiveSide.rawValue) of display \(placement.display.identifier).")
 
     if shouldAnimate {
-      // Animate the window position change
       NSAnimationContext.runAnimationGroup(
         { context in
-          context.duration = 0.3  // Set the duration of the animation
-          window.animator().setFrame(NSRect(origin: newPosition, size: newSize), display: true)
+          context.duration = 0.3
+          window.animator().setFrame(placement.frame, display: true)
         },
         completionHandler: {
           print("Window repositioning animation completed.")
         })
     } else {
-      // Update the window position and size without animation
-      window.setFrame(NSRect(origin: newPosition, size: newSize), display: true)
+      window.setFrame(placement.frame, display: true)
     }
   }
 }

@@ -64,76 +64,58 @@ class GhostWindow: NSWindow {
       let action = userInfo["action"] as? String
     else { return }
 
-    print("Received notification with action: \(action)")
-
     switch action {
     case "update", "show":
-      if let appWindowPosition = userInfo["appWindowPosition"] as? NSRect,
-        let terminalPosition = userInfo["terminalPosition"] as? (position: CGPoint, size: CGSize)
-      {
-        let relativePosition = checkWindowPositionRelativeToTerminal(
-          appWindowPosition: appWindowPosition, terminalWindowPosition: terminalPosition.position,
-          terminalWindowSize: terminalPosition.size)
-
-        if relativePosition == "float" {
-          self.orderOut(nil)
-        } else {
-          let frame = calculateGhostWindowFrame(
-            appWindowPosition: appWindowPosition, terminalPosition: terminalPosition)
-          self.setFrame(frame, display: true)
-          if action == "show" {
-            self.makeKeyAndOrderFront(nil)
-          } else if action == "update" && !self.isVisible {
-            self.makeKeyAndOrderFront(nil)
-          }
-        }
-        print("Updated ghost window frame to: \(frame)")
+      guard let placement = userInfo["attachmentPlacement"] as? AttachmentPlacement,
+        let frame = calculateGhostWindowFrame(placement: placement)
+      else {
+        orderOut(nil)
+        return
       }
+
+      appRelativePositionToTerminalWindow = placement.effectiveSide.rawValue
+      setFrame(frame, display: true)
+      if action == "show" || !isVisible {
+        orderFront(nil)
+      }
+      print(
+        "Ghost preview uses display \(placement.display.identifier), "
+          + "\(placement.effectiveSide.rawValue) side, frame \(frame).")
     case "hide":
-      self.orderOut(nil)
+      orderOut(nil)
       print("Ghost window hidden")
     default:
       break
     }
   }
 
-  private func calculateGhostWindowFrame(
-    appWindowPosition: NSRect, terminalPosition: (position: CGPoint, size: CGSize)
-  ) -> NSRect {
-    appRelativePositionToTerminalWindow = checkWindowPositionRelativeToTerminal(
-      appWindowPosition: appWindowPosition, terminalWindowPosition: terminalPosition.position,
-      terminalWindowSize: terminalPosition.size)
+  private func calculateGhostWindowFrame(placement: AttachmentPlacement) -> NSRect? {
+    let visibleFrame = placement.display.visibleFrame
+    let borderWidth = min(feedbackBorderWidth, visibleFrame.width)
+    guard borderWidth.isFinite, borderWidth > 0 else { return nil }
 
-    // Debug print statements
-    print("App window position: \(appWindowPosition)")
-    print("Terminal position: \(terminalPosition)")
-    print("Relative position: \(appRelativePositionToTerminalWindow ?? "nil")")
-    print("Mouse close to terminal border: \(isMouseCloseToTerminalBorder)")
-    print("Terminal border position: \(terminalBorderPosition ?? "nil")")
-
-    var ghostRect: NSRect
-    let borderWidth = feedbackBorderWidth
-
-    if appRelativePositionToTerminalWindow == "left" {
-      ghostRect = NSRect(
-        x: terminalPosition.position.x, y: terminalPosition.position.y, width: borderWidth,
-        height: terminalPosition.size.height)
-    } else if appRelativePositionToTerminalWindow == "right" {
-      ghostRect = NSRect(
-        x: terminalPosition.position.x + terminalPosition.size.width - borderWidth,
-        y: terminalPosition.position.y, width: borderWidth, height: terminalPosition.size.height)
-    } else {
-      ghostRect = NSRect(
-        x: appWindowPosition.origin.x - borderWidth, y: appWindowPosition.origin.y,
-        width: borderWidth, height: appWindowPosition.size.height)
+    let desiredX: CGFloat
+    switch placement.effectiveSide {
+    case .left:
+      desiredX = placement.terminalFrame.minX
+    case .right:
+      desiredX = placement.terminalFrame.maxX - borderWidth
+    case .float:
+      return nil
     }
 
-    // Final debug print statement
-    print("Calculated ghost window rect: \(ghostRect)")
-
-    ghostRect.origin.y = NSScreen.main!.frame.height - ghostRect.origin.y - ghostRect.height  // Adjust Y-axis
-
-    return ghostRect
+    let x = min(max(desiredX, visibleFrame.minX), visibleFrame.maxX - borderWidth)
+    let frame = NSRect(
+      x: x,
+      y: placement.frame.minY,
+      width: borderWidth,
+      height: placement.frame.height)
+    guard frame.origin.x.isFinite, frame.origin.y.isFinite,
+      frame.width.isFinite, frame.height.isFinite
+    else {
+      return nil
+    }
+    return frame
   }
 
   @objc private func handleMousePositionCloseToTerminalBorder(_ notification: Notification) {
@@ -290,12 +272,13 @@ class ShellMateWindowTrackingDelegate: NSObject {
 
   private func handleMouseUp(_ event: NSEvent) {
     let appWindowPosition = getAppWindowPosition()
-    if let terminalWindowPosition = getTerminalWindowPositionAndSize() {
+    if isDraggingWindow, let terminalWindowPosition = getTerminalWindowPositionAndSize() {
       updateGhostWindowPosition(
         appWindowPosition: appWindowPosition, terminalWindowPosition: terminalWindowPosition)
       handleRelativePositionUpdate(
         appWindowPosition: appWindowPosition, terminalWindowPosition: terminalWindowPosition)
     }
+    isDraggingWindow = false
     removeObserverForShellMate()
     hideGhostWindow()
     mousePositionTrackingManager.stopMonitoringMousePositionEvents()
@@ -328,11 +311,21 @@ class ShellMateWindowTrackingDelegate: NSObject {
   private func handleRelativePositionUpdate(
     appWindowPosition: NSRect?, terminalWindowPosition: (position: CGPoint, size: CGSize)
   ) {
-    let relativePosition = checkWindowPositionRelativeToTerminal(
-      appWindowPosition: appWindowPosition, terminalWindowPosition: terminalWindowPosition.position,
-      terminalWindowSize: terminalWindowPosition.size)
-    print("Relative Position: \(relativePosition)")
-    postWindowAttachmentPositionDidChangeNotification(position: relativePosition.lowercased())
+    guard let appWindowPosition,
+      let geometry = SystemAttachmentGeometryContext.current(),
+      let terminalFrame = geometry.convertAXFrame(
+        CGRect(origin: terminalWindowPosition.position, size: terminalWindowPosition.size))
+    else {
+      return
+    }
+
+    let requestedPosition = checkWindowPositionRelativeToTerminal(
+      appWindowPosition: appWindowPosition,
+      terminalWindowPosition: terminalFrame.origin,
+      terminalWindowSize: terminalFrame.size)
+    print("Requested relative position: \(requestedPosition)")
+    // Persist the position the user dragged to, never a temporary side selected by layout fallback.
+    postWindowAttachmentPositionDidChangeNotification(position: requestedPosition.lowercased())
   }
 
   private func postWindowAttachmentPositionDidChangeNotification(position: String) {
@@ -452,29 +445,25 @@ class ShellMateWindowTrackingDelegate: NSObject {
   private func updateGhostWindowPosition(
     appWindowPosition: NSRect?, terminalWindowPosition: (position: CGPoint, size: CGSize)
   ) {
-    guard let appWindowPosition = appWindowPosition else { return }
-
-    let userInfo: [String: Any] = [
-      "action": "update",
-      "appWindowPosition": appWindowPosition,
-      "terminalPosition": terminalWindowPosition,
-    ]
-
-    NotificationCenter.default.post(
-      name: .ghostWindowStateDidChange, object: nil, userInfo: userInfo)
+    postGhostWindowStateNotification(
+      action: "update",
+      appWindowPosition: appWindowPosition,
+      terminalWindowPosition: terminalWindowPosition)
   }
 
   private func postGhostWindowStateNotification(
     action: String, appWindowPosition: NSRect?,
     terminalWindowPosition: (position: CGPoint, size: CGSize)
   ) {
-    guard let appWindowPosition = appWindowPosition else { return }
+    guard let appWindowPosition else { return }
 
-    let userInfo: [String: Any] = [
-      "action": action,
-      "appWindowPosition": appWindowPosition,
-      "terminalPosition": terminalWindowPosition,
-    ]
+    var userInfo: [String: Any] = ["action": action]
+    if let placement = ghostPlacement(
+      appWindowPosition: appWindowPosition,
+      terminalWindowPosition: terminalWindowPosition)
+    {
+      userInfo["attachmentPlacement"] = placement
+    }
 
     NotificationCenter.default.post(
       name: .ghostWindowStateDidChange, object: nil, userInfo: userInfo)
@@ -483,24 +472,42 @@ class ShellMateWindowTrackingDelegate: NSObject {
   private func createAndShowGhostWindow(
     appWindowPosition: NSRect?, terminalWindowPosition: (position: CGPoint, size: CGSize)
   ) {
-    guard let appWindowPosition = appWindowPosition else { return }
+    guard let appWindowPosition else { return }
 
     let ghostWindow = GhostWindow.getInstance(appWindowPosition: appWindowPosition)
-
-    // Ensure the ghost window is immediately set up and visible
     if ghostWindowController == nil {
       ghostWindowController = NSWindowController(window: ghostWindow)
-      ghostWindowController?.showWindow(nil)
     }
 
-    let userInfo: [String: Any] = [
-      "action": "show",
-      "appWindowPosition": appWindowPosition,
-      "terminalPosition": terminalWindowPosition,
-    ]
+    postGhostWindowStateNotification(
+      action: "show",
+      appWindowPosition: appWindowPosition,
+      terminalWindowPosition: terminalWindowPosition)
+  }
 
-    NotificationCenter.default.post(
-      name: .ghostWindowStateDidChange, object: nil, userInfo: userInfo)
+  private func ghostPlacement(
+    appWindowPosition: NSRect,
+    terminalWindowPosition: (position: CGPoint, size: CGSize)
+  ) -> AttachmentPlacement? {
+    guard let geometry = SystemAttachmentGeometryContext.current() else { return nil }
+
+    let axTerminalFrame = CGRect(
+      origin: terminalWindowPosition.position,
+      size: terminalWindowPosition.size)
+    guard let terminalFrame = geometry.convertAXFrame(axTerminalFrame) else { return nil }
+
+    let relativePosition = checkWindowPositionRelativeToTerminal(
+      appWindowPosition: appWindowPosition,
+      terminalWindowPosition: terminalFrame.origin,
+      terminalWindowSize: terminalFrame.size)
+    guard let requestedSide = AttachmentSide(rawValue: relativePosition.lowercased()) else {
+      return nil
+    }
+
+    return geometry.ghostPreview(
+      axTerminalFrame: axTerminalFrame,
+      requestedSide: requestedSide,
+      shellMateWidth: appWindowPosition.width)
   }
 
   private func initializeGhostWindowIfNeeded(appWindowPosition: NSRect) {
@@ -549,10 +556,13 @@ class MousePositionTrackingManager {
     let mouseLocation = NSEvent.mouseLocation  // Get the global mouse location
     print("Mouse position: \(mouseLocation)")
 
-    if let terminalWindowPosition = getTerminalWindowPositionAndSize() {
-      let distanceToLeftBorder = abs(mouseLocation.x - terminalWindowPosition.position.x)
-      let distanceToRightBorder = abs(
-        mouseLocation.x - (terminalWindowPosition.position.x + terminalWindowPosition.size.width))
+    if let terminalWindowPosition = getTerminalWindowPositionAndSize(),
+      let geometry = SystemAttachmentGeometryContext.current(),
+      let terminalFrame = geometry.convertAXFrame(
+        CGRect(origin: terminalWindowPosition.position, size: terminalWindowPosition.size))
+    {
+      let distanceToLeftBorder = abs(mouseLocation.x - terminalFrame.minX)
+      let distanceToRightBorder = abs(mouseLocation.x - terminalFrame.maxX)
 
       var isClose = false
       var border: String? = nil

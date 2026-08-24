@@ -8,6 +8,7 @@ let package = Package(
   products: [
     .library(name: "SuggestionLookup", targets: ["SuggestionLookup"]),
     .library(name: "OpenAILifecycle", targets: ["OpenAILifecycle"]),
+    .library(name: "AttachmentGeometry", targets: ["AttachmentGeometry"]),
   ],
   targets: [
     .target(
@@ -27,6 +28,15 @@ let package = Package(
       name: "OpenAILifecycleTests",
       dependencies: ["OpenAILifecycle"],
       path: "Tests/OpenAILifecycleTests"
+    ),
+    .target(
+      name: "AttachmentGeometry",
+      path: "ShellMate/AttachmentGeometry"
+    ),
+    .testTarget(
+      name: "AttachmentGeometryTests",
+      dependencies: ["AttachmentGeometry"],
+      path: "Tests/AttachmentGeometryTests"
     ),
   ]
 )
