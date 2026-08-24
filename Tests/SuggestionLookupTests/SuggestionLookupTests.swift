@@ -178,7 +178,7 @@ final class SuggestionLookupTests: XCTestCase {
     let lookupsAfterSuccess = index.operationCounts.lookups
     let malformedIndices: [String?] = [
       nil, "", " 2", "2 ", ".2", "2.", "2.3.1", "-2", "0", "2.0", "02.3", "2.03",
-      "2.30", "two",
+      "two",
     ]
     for malformedIndex in malformedIndices {
       XCTAssertFalse(
@@ -188,6 +188,10 @@ final class SuggestionLookupTests: XCTestCase {
     }
     XCTAssertEqual(index.operationCounts.lookups, lookupsAfterSuccess)
 
+    // These are well-formed but unknown addresses, so each performs exactly one keyed lookup.
+    XCTAssertFalse(
+      handler.select(
+        SuggestionSelectionRequest(selectionIndex: "2.30", terminalID: "terminal-A")))
     XCTAssertFalse(
       handler.select(SuggestionSelectionRequest(selectionIndex: "99", terminalID: "terminal-A")))
     XCTAssertFalse(
@@ -198,7 +202,7 @@ final class SuggestionLookupTests: XCTestCase {
     XCTAssertFalse(
       handler.select(SuggestionSelectionRequest(selectionIndex: "2.3", terminalID: "")))
 
-    XCTAssertEqual(index.operationCounts.lookups, lookupsAfterSuccess + 2)
+    XCTAssertEqual(index.operationCounts.lookups, lookupsAfterSuccess + 3)
     XCTAssertEqual(spy.clipboardWrites, ["a-first", "a-third", "b-third"])
     XCTAssertEqual(spy.pasteCount, 3)
     XCTAssertEqual(spy.successCount, 3)
