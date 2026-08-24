@@ -486,6 +486,7 @@ class AppViewModel: ObservableObject {
           changedTerminalContentSentToGptAt: changedTerminalContentSentToGptAt,
           source: source
         )
+        try Task.checkCancellation()
 
         if let pending = strongSelf.pendingTerminalAnalysis,
           pending.identifier == strongSelf.currentTerminalID
@@ -515,6 +516,10 @@ class AppViewModel: ObservableObject {
           }
         }
       } catch {
+        if error is CancellationError || Task.isCancelled {
+          return
+        }
+
         SentrySDK.capture(error: error)
         print("DEBUG: Error getting or creating thread ID: \(error.localizedDescription)")
 
@@ -523,8 +528,6 @@ class AppViewModel: ObservableObject {
         {
           DispatchQueue.main.async {
             strongSelf.hasInternetConnection = false
-            SuggestionGenerationMonitor.shared.setIsGeneratingSuggestion(
-              for: currentTerminalId, stateID: terminalStateID, to: false)
           }
         } else if error.localizedDescription.contains(
           "The Internet connection appears to be offline")
@@ -532,8 +535,6 @@ class AppViewModel: ObservableObject {
           DispatchQueue.main.async {
             NetworkErrorViewModel.shared.shouldShowNetworkError = true
             strongSelf.hasInternetConnection = false
-            SuggestionGenerationMonitor.shared.setIsGeneratingSuggestion(
-              for: currentTerminalId, stateID: terminalStateID, to: false)
           }
         }
       }
@@ -591,6 +592,7 @@ class AppViewModel: ObservableObject {
         changedTerminalContentSentToGptAt: changedTerminalContentSentToGptAt,
         source: source
       )
+      guard !Task.isCancelled else { return }
 
       if let pending = strongSelf.pendingTerminalAnalysis,
         pending.identifier == strongSelf.currentTerminalID
@@ -632,11 +634,6 @@ class AppViewModel: ObservableObject {
 
       // Check if the response is empty and return early if it is
       if response.isEmpty {
-        // Mark suggestion generation as false since we are skipping processing
-        Task { @MainActor in
-          SuggestionGenerationMonitor.shared.setIsGeneratingSuggestion(
-            for: identifier, stateID: terminalStateID, to: false)
-        }
         pendingTerminalAnalysis = (
           identifier: identifier,
           changeIdentifiedAt: changeIdentifiedAt, source: source,
@@ -670,6 +667,10 @@ class AppViewModel: ObservableObject {
         //shouldGenerateFollowUpSuggestionsFlag = shouldGenerateFollowUpSuggestions
       }
     } catch {
+      if error is CancellationError || Task.isCancelled {
+        return
+      }
+
       SentrySDK.capture(error: error)
       print("Error processing message in thread: \(error.localizedDescription)")
 
@@ -678,30 +679,17 @@ class AppViewModel: ObservableObject {
       {
         DispatchQueue.main.async {
           self.hasInternetConnection = false
-          SuggestionGenerationMonitor.shared.setIsGeneratingSuggestion(
-            for: identifier, stateID: terminalStateID, to: false)
         }
       } else if error.localizedDescription.contains("The Internet connection appears to be offline")
       {
         DispatchQueue.main.async {
           NetworkErrorViewModel.shared.shouldShowNetworkError = true
           self.hasInternetConnection = false
-          SuggestionGenerationMonitor.shared.setIsGeneratingSuggestion(
-            for: identifier, stateID: terminalStateID, to: false)
-        }
-      } else {
-        // For all other error cases, ensure isGeneratingSuggestion is set to false
-        DispatchQueue.main.async {
-          SuggestionGenerationMonitor.shared.setIsGeneratingSuggestion(
-            for: identifier, stateID: terminalStateID, to: false)
         }
       }
     }
 
     Task { @MainActor in
-      SuggestionGenerationMonitor.shared.setIsGeneratingSuggestion(
-        for: identifier, stateID: terminalStateID, to: false)
-
       // Log the event when response is received from GPT
       let responseReceivedFromGptAt = Date().timeIntervalSince1970
       let delayToProcessChange = changedTerminalContentSentToGptAt - changeIdentifiedAt

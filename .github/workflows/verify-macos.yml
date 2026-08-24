@@ -1,4 +1,4 @@
-name: Verify macOS integration
+name: Verify OpenAI lifecycle macOS integration
 
 on:
   push:
@@ -12,22 +12,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Toolchain versions
+      - name: Select Xcode 15.4 and show toolchains
         run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app
           sw_vers
           xcodebuild -version
           swift --version
 
-      - name: SwiftPM task tests
+      - name: SwiftPM lifecycle tests
+        run: swift test --filter OpenAILifecycleTests
+
+      - name: SwiftPM all tests
         run: swift test
 
-      - name: Xcode task tests
+      - name: Xcode generated-package lifecycle tests
         run: |
           package_dir="$(mktemp -d)"
           cp Package.swift "$package_dir/"
           mkdir -p "$package_dir/ShellMate" "$package_dir/Tests"
-          cp -R ShellMate/SuggestionLookup "$package_dir/ShellMate/"
-          cp -R Tests/SuggestionLookupTests "$package_dir/Tests/"
+          cp -R ShellMate/SuggestionLookup ShellMate/OpenAILifecycle "$package_dir/ShellMate/"
+          cp -R Tests/SuggestionLookupTests Tests/OpenAILifecycleTests "$package_dir/Tests/"
           cd "$package_dir"
           xcodebuild -list
           xcodebuild \
@@ -38,9 +42,6 @@ jobs:
 
       - name: Prepare placeholder build configuration
         run: cp Template.Secrets.xcconfig Secrets.xcconfig
-
-      - name: Inspect application project
-        run: xcodebuild -list -project ShellMate.xcodeproj
 
       - name: Resolve application dependencies
         run: |

@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B20000000000000000000001 /* OpenAILifecycleTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* OpenAILifecycleTypes.swift */; };
+		B20000000000000000000002 /* OpenAITransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* OpenAITransport.swift */; };
+		B20000000000000000000003 /* OpenAIAssistantClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* OpenAIAssistantClient.swift */; };
 		A10000000000000000000001 /* SuggestionCommandIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* SuggestionCommandIndex.swift */; };
 		A10000000000000000000002 /* SuggestionSelectionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* SuggestionSelectionHandler.swift */; };
 		49D68AD52C35B830000AB5AF /* sm in Copy Files: Make sm command available in user terminal */ = {isa = PBXBuildFile; fileRef = DC9B38C72C2502FA006755AE /* sm */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -88,6 +91,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B20000000000000000000004 /* OpenAILifecycleTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAILifecycleTypes.swift; sourceTree = "<group>"; };
+		B20000000000000000000005 /* OpenAITransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAITransport.swift; sourceTree = "<group>"; };
+		B20000000000000000000006 /* OpenAIAssistantClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIAssistantClient.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* SuggestionCommandIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionCommandIndex.swift; sourceTree = "<group>"; };
 		A10000000000000000000004 /* SuggestionSelectionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionSelectionHandler.swift; sourceTree = "<group>"; };
 		527465482CA2E32B00C9760E /* AFKSessionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFKSessionService.swift; sourceTree = "<group>"; };
@@ -166,6 +172,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B20000000000000000000007 /* OpenAILifecycle */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000004 /* OpenAILifecycleTypes.swift */,
+				B20000000000000000000005 /* OpenAITransport.swift */,
+				B20000000000000000000006 /* OpenAIAssistantClient.swift */,
+			);
+			path = OpenAILifecycle;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000005 /* SuggestionLookup */ = {
 			isa = PBXGroup;
 			children = (
@@ -295,6 +311,7 @@
 		DC9B38882C24FFEA006755AE /* ShellMate */ = {
 			isa = PBXGroup;
 			children = (
+				B20000000000000000000007 /* OpenAILifecycle */,
 				A10000000000000000000005 /* SuggestionLookup */,
 				527465472CA2E31100C9760E /* Services */,
 				DCEF52422C8F4558000AB274 /* GPT */,
@@ -516,6 +533,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000001 /* OpenAILifecycleTypes.swift in Sources */,
+				B20000000000000000000002 /* OpenAITransport.swift in Sources */,
+				B20000000000000000000003 /* OpenAIAssistantClient.swift in Sources */,
 				A10000000000000000000001 /* SuggestionCommandIndex.swift in Sources */,
 				A10000000000000000000002 /* SuggestionSelectionHandler.swift in Sources */,
 				DC9B38D32C25039F006755AE /* TerminalContentManager.swift in Sources */,
