@@ -1,0 +1,72 @@
+name: Verify macOS integration
+
+on:
+  push:
+    branches: [verify-macos]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: SwiftPM task tests
+        run: swift test
+
+      - name: Xcode task tests
+        run: |
+          package_dir="$(mktemp -d)"
+          cp Package.swift "$package_dir/"
+          mkdir -p "$package_dir/ShellMate" "$package_dir/Tests"
+          cp -R ShellMate/SuggestionLookup "$package_dir/ShellMate/"
+          cp -R Tests/SuggestionLookupTests "$package_dir/Tests/"
+          cd "$package_dir"
+          xcodebuild -list
+          xcodebuild \
+            -scheme SuggestionLookup \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Prepare placeholder build configuration
+        run: cp Template.Secrets.xcconfig Secrets.xcconfig
+
+      - name: Inspect application project
+        run: xcodebuild -list -project ShellMate.xcodeproj
+
+      - name: Resolve application dependencies
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project ShellMate.xcodeproj \
+            -scheme ShellMate
+
+      - name: Build application
+        run: |
+          xcodebuild \
+            -project ShellMate.xcodeproj \
+            -scheme ShellMate \
+            -configuration Debug \
+            -sdk macosx \
+            -derivedDataPath /tmp/ShellMateDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build CLI
+        run: |
+          xcodebuild \
+            -project ShellMate.xcodeproj \
+            -scheme ShellMateCLI \
+            -configuration Debug \
+            -sdk macosx \
+            -derivedDataPath /tmp/ShellMateCLIDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
