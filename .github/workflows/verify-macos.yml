@@ -35,7 +35,7 @@ jobs:
           cd "$package_dir"
           xcodebuild -list
           xcodebuild \
-            -scheme ShellMateSuggestionLookup \
+            -scheme ShellMateSuggestionLookup-Package \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
             test
