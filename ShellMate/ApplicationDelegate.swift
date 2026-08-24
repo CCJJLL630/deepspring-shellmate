@@ -123,11 +123,11 @@ class ApplicationDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     observeTerminalLifecycle()
     terminalContentDelegate.applicationDidFinishLaunching(
       Notification(name: Notification.Name("AppDidFinishLaunching")))
+    keyPressDelegate.applicationDidFinishLaunching(
+      Notification(name: Notification.Name("AppDidFinishLaunching")))
     windowPositionDelegate.applicationDidFinishLaunching(
       Notification(name: Notification.Name("AppDidFinishLaunching")))
     windowPositionDelegate.initializeObserverForRunningTerminal()
-    keyPressDelegate.applicationDidFinishLaunching(
-      Notification(name: Notification.Name("AppDidFinishLaunching")))
 
     CompanionModeManager.shared.handleContinueAction()
   }

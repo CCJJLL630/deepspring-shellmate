@@ -154,32 +154,6 @@ func pasteClipboardContent() {
   sendKeyPress(keyCode: 9, modifiers: commandKey)  // Assuming 'v' key has a key code of 9
 }
 
-// Function to get the complete path to shellMateCommandSuggestions.json
-func getShellMateCommandSuggestionsFilePath() -> URL {
-  let sharedTempDirectory = getSharedTemporaryDirectory()
-  let filePath = sharedTempDirectory.appendingPathComponent("shellMateCommandSuggestions.json")
-  return filePath
-}
-
-// Helper function to get the shared temporary directory
-func getSharedTemporaryDirectory() -> URL {
-  let tempDirectoryURL = FileManager.default.temporaryDirectory
-  return tempDirectoryURL
-}
-
-// Function to load a command from JSON file
-func loadCommandFromJSON(filePath: URL, key: String) -> String? {
-  do {
-    let data = try Data(contentsOf: filePath)
-    if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: String] {
-      return json[key]
-    }
-  } catch {
-    print("Error loading or parsing JSON: \(error)")
-  }
-  return nil
-}
-
 func obfuscateAuthTokens(in text: String) -> String {
   // List of common separators
   let separators = "[\\s_\\-:;=.,/|\\\\]"

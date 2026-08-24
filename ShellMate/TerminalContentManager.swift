@@ -8,7 +8,7 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
   var highlightTextObserver: Observer?
   var previousTerminalText: String?
   var previousHighlightedText: String?
-  var previousActiveLine: String?
+  var previousActiveLinesByTerminal: [CGWindowID: String] = [:]
   var textDebounceWorkItem: DispatchWorkItem?
   var highlightDebounceWorkItem: DispatchWorkItem?
   var activeLineDebounceWorkItem: DispatchWorkItem?
@@ -57,6 +57,12 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
       currentTerminalWindowID = windowID  // Update the current terminal window ID
       startTerminalTextObserver(for: textAreaElement)
       startHighlightObserver(for: textAreaElement)
+
+      // Associate the active line with this window immediately. Waiting for the next value change
+      // could leave selection handling with the line from a previously focused Terminal.
+      if let sanitizedText = getSanitizedTerminalText(from: textAreaElement) {
+        postTerminalActiveLineChangedNotification(text: getLastLine(from: sanitizedText))
+      }
     } else {
       NSLog("AXTextArea element not found in the new terminal window")
     }
@@ -169,11 +175,13 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
   }
 
   private func postTerminalActiveLineChangedNotification(text: String) {
-    guard text != previousActiveLine else { return }  // Avoid duplicate notifications
-    previousActiveLine = text
+    guard let windowID = currentTerminalWindowID else { return }
+    guard text != previousActiveLinesByTerminal[windowID] else { return }
+    previousActiveLinesByTerminal[windowID] = text
 
     let userInfo: [String: Any] = [
-      "activeLine": text
+      "activeLine": text,
+      "terminalWindowID": windowID,
     ]
     NotificationCenter.default.post(
       name: .terminalActiveLineChanged, object: nil, userInfo: userInfo)
@@ -193,13 +201,16 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
   }
 
   func debounceActiveLineChange() {
-    guard let element = terminalTextAreaElement else { return }
+    guard let element = terminalTextAreaElement, let windowID = currentTerminalWindowID else {
+      return
+    }
 
     activeLineDebounceWorkItem?.cancel()
     let workItem = DispatchWorkItem { [weak self] in
-      if let sanitizedText = self?.getSanitizedTerminalText(from: element) {
-        let lastLine = self?.getLastLine(from: sanitizedText)
-        self?.postTerminalActiveLineChangedNotification(text: lastLine ?? "")
+      guard let self = self, self.currentTerminalWindowID == windowID else { return }
+      if let sanitizedText = self.getSanitizedTerminalText(from: element) {
+        let lastLine = self.getLastLine(from: sanitizedText)
+        self.postTerminalActiveLineChangedNotification(text: lastLine)
       }
     }
     activeLineDebounceWorkItem = workItem

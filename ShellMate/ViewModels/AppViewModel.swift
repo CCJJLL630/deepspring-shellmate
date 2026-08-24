@@ -44,6 +44,8 @@ class AppViewModel: ObservableObject {
   private let maxSuggestionsPerEvent: Int = 4
   private var shouldGenerateFollowUpSuggestionsFlag: Bool = false
   private var gptAssistantManager: GPTAssistantManager = GPTAssistantManager.shared
+  private let suggestionCommandIndex: SuggestionCommandRegistering
+  private let suggestionAddressTracker = SuggestionAddressTracker()
   private var firstProTipDebounceWorkItem: DispatchWorkItem?
 
   // UserDefaults keys
@@ -131,7 +133,8 @@ class AppViewModel: ObservableObject {
     internetConnectionGracePeriodTask = nil
   }
 
-  init() {
+  init(suggestionCommandIndex: SuggestionCommandRegistering = SuggestionCommandIndex.shared) {
+    self.suggestionCommandIndex = suggestionCommandIndex
     self.GPTSuggestionsFreeTierCount = UserDefaults.standard.integer(
       forKey: GPTSuggestionsFreeTierCountKey)
     self.hasGPTSuggestionsFreeTierCountReachedLimit = UserDefaults.standard.bool(
@@ -745,21 +748,24 @@ class AppViewModel: ObservableObject {
       GPTSuggestionsFreeTierCount >= GPTSuggestionsFreeTierLimit
   }
 
+  @MainActor
+  @discardableResult
   private func updateResults(
     identifier: String,
     terminalStateID: UUID,
     entry: [String: String],
     currentTime: Date
-  ) {
+  ) -> SuggestionAddress {
+    let address = suggestionAddressTracker.addressForNextEntry(
+      terminalID: identifier, stateID: terminalStateID)
+
     if var windowInfo = self.results[identifier] {
-      var batchFound = false
-      for (index, batch) in windowInfo.suggestionsHistory.enumerated()
-      where batch.0 == terminalStateID {
-        windowInfo.suggestionsHistory[index].1.append(entry)
-        batchFound = true
-        break
-      }
-      if !batchFound {
+      let batchOffset = address.batchIndex - 1
+      if batchOffset < windowInfo.suggestionsHistory.count {
+        assert(windowInfo.suggestionsHistory[batchOffset].0 == terminalStateID)
+        windowInfo.suggestionsHistory[batchOffset].1.append(entry)
+      } else {
+        assert(batchOffset == windowInfo.suggestionsHistory.count)
         windowInfo.suggestionsHistory.append((terminalStateID, [entry]))
         if entry["isProTipBanner"] != "true" {
           MixpanelHelper.shared.trackEvent(name: "newSuggestionsGroupCreated")
@@ -769,6 +775,7 @@ class AppViewModel: ObservableObject {
       windowInfo.updatedAt = currentTime
       self.results[identifier] = windowInfo
     } else {
+      assert(address.batchIndex == 1 && address.suggestionIndex == 1)
       self.results[identifier] = (
         suggestionsCount: 1, suggestionsHistory: [(terminalStateID, [entry])],
         updatedAt: currentTime
@@ -778,52 +785,50 @@ class AppViewModel: ObservableObject {
     // Update hasAtLeastOneSuggestion and conditionally trigger updateShouldShowSuggestionsView
     self.updateHasAtLeastOneSuggestion(for: identifier, with: entry)
     self.updateCounter += 1
+    return address
   }
 
   @MainActor
+  @discardableResult
   private func appendResult(
     identifier: String, terminalStateID: UUID, response: String?, command: String?,
     explanation: String?
-  ) {
+  ) -> SuggestionAddress? {
     guard let response = response, !response.isEmpty,
       let command = command, !command.isEmpty,
       let explanation = explanation, !explanation.isEmpty
     else {
-      return
+      return nil
     }
 
-    DispatchQueue.main.async {
-      let currentTime = Date()
+    let currentTime = Date()
 
-      // Check if there is a pending pro-tip for this identifier (only for proTipIdx 2)
-      if let pendingProTip = self.pendingProTips[identifier], pendingProTip.proTipIdx == 2 {
-        self.updateResults(
-          identifier: identifier,
-          terminalStateID: pendingProTip.terminalStateID,
-          entry: pendingProTip.proTipEntry,
-          currentTime: pendingProTip.currentTime
-        )
-
-        // Remove the pending pro-tip after appending it
-        self.pendingProTips.removeValue(forKey: identifier)
-      }
-
-      // Create the new entry
-      let newEntry = [
-        "gptResponse": response, "suggestedCommand": command, "commandExplanation": explanation,
-      ]
-
-      // Use updateResults directly for the new entry
+    // Check if there is a pending pro-tip for this identifier (only for proTipIdx 2)
+    if let pendingProTip = self.pendingProTips[identifier], pendingProTip.proTipIdx == 2 {
       self.updateResults(
         identifier: identifier,
-        terminalStateID: terminalStateID,
-        entry: newEntry,
-        currentTime: currentTime
+        terminalStateID: pendingProTip.terminalStateID,
+        entry: pendingProTip.proTipEntry,
+        currentTime: pendingProTip.currentTime
       )
 
-      self.writeResultsToFile()
-      self.incrementGPTSuggestionsCount(tier: self.hasUserValidatedOwnOpenAIAPIKey, by: 1)
+      // Remove the pending pro-tip after appending it
+      self.pendingProTips.removeValue(forKey: identifier)
     }
+
+    let newEntry = [
+      "gptResponse": response, "suggestedCommand": command, "commandExplanation": explanation,
+    ]
+
+    let address = self.updateResults(
+      identifier: identifier,
+      terminalStateID: terminalStateID,
+      entry: newEntry,
+      currentTime: currentTime
+    )
+    suggestionCommandIndex.register(command: command, for: identifier, at: address)
+    self.incrementGPTSuggestionsCount(tier: self.hasUserValidatedOwnOpenAIAPIKey, by: 1)
+    return address
   }
 
   @MainActor
@@ -843,12 +848,7 @@ class AppViewModel: ObservableObject {
       )
 
     case 5:
-      handleSpecialProTipIdx5(
-        identifier: identifier,
-        terminalStateID: terminalStateID,
-        proTipEntry: proTipEntry,
-        currentTime: currentTime
-      )
+      handleSpecialProTipIdx5(identifier: identifier, terminalStateID: terminalStateID)
 
     default:
       appendProTipToResults(
@@ -874,96 +874,38 @@ class AppViewModel: ObservableObject {
   }
 
   @MainActor
-  private func handleSpecialProTipIdx5(
-    identifier: String,
-    terminalStateID: UUID,
-    proTipEntry: [String: String],
-    currentTime: Date
-  ) {
+  private func handleSpecialProTipIdx5(identifier: String, terminalStateID: UUID) {
     let response = "refresh shell profile - fix command not found: sm"
     let command = UpdateShellProfileViewModel.shared.fixingCommand
     let explanation =
       "Reloads your terminal profile, allowing the 'sm' command to function properly."
 
-    appendResult(
+    if let address = appendResult(
       identifier: identifier,
       terminalStateID: terminalStateID,
       response: response,
       command: command,
       explanation: explanation
-    )
-
-    // Ensure this is executed after appendResult
-    DispatchQueue.main.async {
-      if let indices = self.getCurrentSuggestionIndices(
-        identifier: identifier, terminalStateID: terminalStateID)
-      {
-        let suggestionID = generateSuggestionViewElementID(batchIndex: indices.batchIndex)
-        UpdateShellProfileViewModel.shared.fixSmCommandNotFoundSuggestionIndex = suggestionID
-        UpdateShellProfileViewModel.shared.updateShouldShowUpdateShellProfile(value: true)
-      } else {
-        print("Failed to retrieve current suggestion indices")
-      }
+    ) {
+      // View element IDs use zero-based batch indices, unlike the visible selection address.
+      let suggestionID = generateSuggestionViewElementID(batchIndex: address.batchIndex - 1)
+      UpdateShellProfileViewModel.shared.fixSmCommandNotFoundSuggestionIndex = suggestionID
+      UpdateShellProfileViewModel.shared.updateShouldShowUpdateShellProfile(value: true)
+    } else {
+      print("Failed to append the update-shell-profile suggestion")
     }
   }
 
+  @MainActor
   private func appendProTipToResults(
     identifier: String, proTipEntry: [String: String], terminalStateID: UUID, currentTime: Date
   ) {
-    DispatchQueue.main.async {
-      self.updateResults(
-        identifier: identifier,
-        terminalStateID: terminalStateID,
-        entry: proTipEntry,
-        currentTime: currentTime
-      )
-    }
-  }
-
-  private func getSharedTemporaryDirectory() -> URL {
-    let sharedTempDirectory = URL(fileURLWithPath: "/tmp/shellMateShared")
-
-    // Ensure the directory exists
-    if !FileManager.default.fileExists(atPath: sharedTempDirectory.path) {
-      do {
-        try FileManager.default.createDirectory(
-          at: sharedTempDirectory, withIntermediateDirectories: true, attributes: nil)
-      } catch {
-        print("Failed to create shared temporary directory: \(error)")
-      }
-    }
-
-    return sharedTempDirectory
-  }
-
-  private func writeResultsToFile() {
-    DispatchQueue.global(qos: .background).async {  // Moved file writing to a background thread
-      guard let currentTerminalID = self.currentTerminalID,
-        let terminalResults = self.results[currentTerminalID]
-      else {
-        return
-      }
-      let filePath = getShellMateCommandSuggestionsFilePath()
-
-      var jsonOutput: [String: String] = [:]
-
-      // Use the normal for loop index
-      for (batchIndex, batch) in terminalResults.suggestionsHistory.enumerated() {
-        for (suggestionIndex, gptResponse) in batch.1.enumerated() {
-          if let suggestedCommand = gptResponse["suggestedCommand"] {
-            let jsonId = "\(batchIndex + 1).\(suggestionIndex + 1)"
-            jsonOutput[jsonId] = suggestedCommand
-          }
-        }
-      }
-
-      do {
-        let jsonData = try JSONEncoder().encode(jsonOutput)
-        try jsonData.write(to: filePath, options: .atomic)
-      } catch {
-        print("Failed to write JSON data to file: \(error.localizedDescription)")
-      }
-    }
+    self.updateResults(
+      identifier: identifier,
+      terminalStateID: terminalStateID,
+      entry: proTipEntry,
+      currentTime: currentTime
+    )
   }
 
   @MainActor
@@ -1112,27 +1054,4 @@ class AppViewModel: ObservableObject {
     }
   }
 
-  private func getCurrentSuggestionIndices(identifier: String, terminalStateID: UUID) -> (
-    batchIndex: Int, index: Int
-  )? {
-    // First, find the window data associated with the provided identifier
-    guard let windowData = results[identifier] else {
-      return nil
-    }
-
-    // Iterate over the suggestionsHistory to find the batch that matches the terminalStateID
-    for (batchIndex, batch) in windowData.suggestionsHistory.enumerated() {
-      // Check if this batch matches the terminalStateID we're looking for
-      if batch.0 == terminalStateID {
-        let suggestionCount = batch.1.count
-        if suggestionCount > 0 {
-          // Return the batchIndex and the index of the last suggestion in this batch
-          return (batchIndex, suggestionCount - 1)
-        } else {
-          return (batchIndex, 0)  // If there are no suggestions, return the first index (0)
-        }
-      }
-    }
-    return nil
-  }
 }

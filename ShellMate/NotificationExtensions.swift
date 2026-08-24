@@ -23,6 +23,7 @@ extension Notification.Name {
   /// Notification to send the current active terminal line for processing.
   /// userInfo dictionary should contain:
   /// - "activeLine": String (the last line of the terminal text)
+  /// - "terminalWindowID": CGWindowID (the window that owns the line)
   static let terminalActiveLineChanged = Notification.Name("terminalActiveLineChanged")
 
   /// Notification to indicate the window attachment position has changed.
