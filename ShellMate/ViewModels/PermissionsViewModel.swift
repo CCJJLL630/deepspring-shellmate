@@ -115,6 +115,7 @@ class LicenseViewModel: ObservableObject {
     let validatesCustomCredential = runtime.activeCredential() != nil
 
     startupValidationTask = Task { [weak self, validator] in
+      guard let viewModel = self else { return }
       do {
         if delay > 0 {
           try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -126,10 +127,10 @@ class LicenseViewModel: ObservableObject {
             try await validator.validate(candidate: candidate)
             try Task.checkCancellation()
             await MainActor.run {
-              guard let self, generation == self.viewGeneration else { return }
-              self.apiKeyErrorMessage = nil
-              self.apiKeyValidationState = validatesCustomCredential ? .valid : .unverified
-              self.postAPIKeyValidation(validatesCustomCredential ? true : nil)
+              guard generation == viewModel.viewGeneration else { return }
+              viewModel.apiKeyErrorMessage = nil
+              viewModel.apiKeyValidationState = validatesCustomCredential ? .valid : .unverified
+              viewModel.postAPIKeyValidation(validatesCustomCredential ? true : nil)
               completion(true)
             }
             return
@@ -145,10 +146,10 @@ class LicenseViewModel: ObservableObject {
         return
       } catch {
         await MainActor.run {
-          guard let self, generation == self.viewGeneration else { return }
-          self.apiKeyValidationState = .invalid
-          self.apiKeyErrorMessage = CredentialFailure.validationRejected.userMessage
-          self.postAPIKeyValidation(false)
+          guard generation == viewModel.viewGeneration else { return }
+          viewModel.apiKeyValidationState = .invalid
+          viewModel.apiKeyErrorMessage = CredentialFailure.validationRejected.userMessage
+          viewModel.postAPIKeyValidation(false)
           completion(false)
         }
       }
@@ -219,6 +220,7 @@ class LicenseViewModel: ObservableObject {
 
     apiKeyValidationState = .unverified
     validationTask = Task { [weak self, editor] in
+      guard let viewModel = self else { return }
       do {
         try await Task.sleep(nanoseconds: 250_000_000)
       } catch {
@@ -227,17 +229,17 @@ class LicenseViewModel: ObservableObject {
 
       let result = await editor.validateAndReplace(request)
       await MainActor.run {
-        guard let self, generation == self.viewGeneration else { return }
+        guard generation == viewModel.viewGeneration else { return }
         switch result {
         case .committed:
-          self.applyDraft(sanitized)
-          self.hasCustomCredential = true
-          self.apiKeyValidationState = .valid
-          self.apiKeyErrorMessage = nil
+          viewModel.applyDraft(sanitized)
+          viewModel.hasCustomCredential = true
+          viewModel.apiKeyValidationState = .valid
+          viewModel.apiKeyErrorMessage = nil
         case .rejected(let failure):
-          self.hasCustomCredential = self.runtime.activeCredential() != nil
-          self.apiKeyValidationState = .invalid
-          self.apiKeyErrorMessage = failure.userMessage
+          viewModel.hasCustomCredential = viewModel.runtime.activeCredential() != nil
+          viewModel.apiKeyValidationState = .invalid
+          viewModel.apiKeyErrorMessage = failure.userMessage
         case .superseded:
           break
         }
