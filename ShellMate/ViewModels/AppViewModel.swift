@@ -537,7 +537,7 @@ class AppViewModel: ObservableObject {
           return
         }
 
-        captureSafeOpenAIFailure(context: "Thread creation failed")
+        strongSelf.captureSafeOpenAIFailure(context: "Thread creation failed")
         print("DEBUG: Error getting or creating thread ID.")
 
         if error.localizedDescription.contains("The network connection was lost")
