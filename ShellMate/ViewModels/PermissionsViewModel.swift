@@ -51,225 +51,215 @@ enum ApiKeyValidationState: String {
   case invalid
 }
 
+/// UI adapter for the transactional credential editor. `apiKey` is an in-memory draft only; custom
+/// credentials are persisted exclusively by `CredentialRuntime` after successful validation.
 class LicenseViewModel: ObservableObject {
-  static let shared = LicenseViewModel()
+  static let shared = LicenseViewModel(
+    runtime: ShellMateCredentialRuntime.shared,
+    validator: ShellMateCredentialValidator(),
+    refresher: ShellMateCredentialRefresher(),
+    reporter: ShellMateCredentialEventReporter()
+  )
 
   @Published var apiKeyErrorMessage: String?
-  @Published var apiKey: String = "" {
-    didSet {
-      // Cancel any ongoing validation
-      apiKeyCheckTask?.cancel()
-
-      sanitizeApiKey(apiKey)
-
-      // Debounce the API key validation
-      let debouncedTask = DispatchWorkItem { [weak self] in
-        guard let self = self else { return }
-
-        // Sanitize the API key by removing spaces and newlines
-        let sanitizedApiKey = self.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Check if the sanitized API key is empty
-        if sanitizedApiKey.isEmpty {
-          // If it is empty, update UserDefaults with an empty string
-          print("DEBUG: sanitized empty key trigger")
-          UserDefaults.standard.set("", forKey: "apiKey")
-          self.scheduleApiKeyCheck(after: 2, completion: { _ in })
-        } else {
-          // Otherwise, update UserDefaults with the sanitized API key
-          UserDefaults.standard.set(sanitizedApiKey, forKey: "apiKey")
-          // Schedule the API key check
-          self.scheduleApiKeyCheck(after: 2, completion: { _ in })
-        }
-
-        print("API Key updated: \(sanitizedApiKey)")
-      }
-
-      // Execute the task after a delay to debounce
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: debouncedTask)
-      apiKeyCheckTask = debouncedTask
-    }
+  @Published var apiKey: String {
+    didSet { handleDraftEdit() }
   }
+  @Published var apiKeyValidationState: ApiKeyValidationState
+  @Published private(set) var isAPIKeyRevealed = false
+  @Published private(set) var hasCustomCredential: Bool
 
-  @Published var apiKeyValidationState: ApiKeyValidationState = .unverified {
-    didSet {
-      print("DEBUG: the current state is: \(apiKeyValidationState)")
-    }
-  }
+  private let runtime: CredentialRuntime
+  private let validator: any CredentialValidating
+  private let editor: CredentialEditor
+  private var validationTask: Task<Void, Never>?
+  private var startupValidationTask: Task<Void, Never>?
+  private var viewGeneration: UInt64 = 0
+  private var isApplyingDraft = false
 
-  private var timer: AnyCancellable?
-  private var apiKeyCheckTask: DispatchWorkItem?
-
-  private init() {
-    self.apiKey = UserDefaults.standard.string(forKey: "apiKey") ?? ""
-    self.apiKeyValidationState =
-      ApiKeyValidationState(
-        rawValue: UserDefaults.standard.string(forKey: "apiKeyValidationState")
-          ?? ApiKeyValidationState.unverified.rawValue) ?? .unverified
+  private init(
+    runtime: CredentialRuntime,
+    validator: any CredentialValidating,
+    refresher: any CredentialRefreshHandling,
+    reporter: any CredentialEventReporting
+  ) {
+    self.runtime = runtime
+    self.validator = validator
+    self.editor = CredentialEditor(
+      runtime: runtime,
+      validator: validator,
+      refresher: refresher,
+      reporter: reporter
+    )
+    let persistedCredential = runtime.activeCredential()
+    self.apiKey = persistedCredential ?? ""
+    self.hasCustomCredential = persistedCredential != nil
+    self.apiKeyValidationState = persistedCredential == nil ? .unverified : .valid
   }
 
   deinit {
-    timer?.cancel()
-    apiKeyCheckTask?.cancel()
+    validationTask?.cancel()
+    startupValidationTask?.cancel()
   }
 
-  // Add a property to track the async task for cancellation
-  private var currentApiKeyCheckTask: Task<Void, Never>? = nil
-
+  /// Retains the launch-time permission workflow while validating one immutable credential value.
+  /// It never commits or rewrites the active credential.
   func scheduleApiKeyCheck(
-    after delay: TimeInterval, maxRetries: Int = 3, completion: @escaping (Bool) -> Void
+    after delay: TimeInterval,
+    maxRetries: Int = 1,
+    completion: @escaping (Bool) -> Void
   ) {
-    // Cancel any existing task (this will cancel the entire retry process if it's ongoing)
-    apiKeyCheckTask?.cancel()
-    currentApiKeyCheckTask?.cancel()  // Cancel the current async task if it's running
+    startupValidationTask?.cancel()
+    let generation = viewGeneration
+    let candidate = runtime.credentialForAuthorization(fallback: getHardcodedOpenAIAPIKey())
+    let validatesCustomCredential = runtime.activeCredential() != nil
 
-    // Define a new DispatchWorkItem that encapsulates the logic
-    let task = DispatchWorkItem { [weak self] in
-      guard let self = self else { return }
+    startupValidationTask = Task { [weak self, validator] in
+      do {
+        if delay > 0 {
+          try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
 
-      // Create a Task to handle the async call within DispatchWorkItem
-      self.currentApiKeyCheckTask = Task {
-        // Call the asynchronous function to check the API key
-        await self.executeApiKeyCheckWithRetry(
-          maxRetries: maxRetries,
-          completion: { isValid in
-            DispatchQueue.main.async {
-              completion(isValid)  // Ensure the completion is called on the main thread
+        var attemptsRemaining = max(1, maxRetries)
+        while true {
+          do {
+            try await validator.validate(candidate: candidate)
+            try Task.checkCancellation()
+            await MainActor.run {
+              guard let self, generation == self.viewGeneration else { return }
+              self.apiKeyErrorMessage = nil
+              self.apiKeyValidationState = validatesCustomCredential ? .valid : .unverified
+              self.postAPIKeyValidation(validatesCustomCredential ? true : nil)
+              completion(true)
             }
-          })
+            return
+          } catch is CancellationError {
+            return
+          } catch {
+            attemptsRemaining -= 1
+            guard attemptsRemaining > 0 else { throw CredentialFailure.validationRejected }
+            try await Task.sleep(nanoseconds: 10 * 1_000_000_000)
+          }
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        await MainActor.run {
+          guard let self, generation == self.viewGeneration else { return }
+          self.apiKeyValidationState = .invalid
+          self.apiKeyErrorMessage = CredentialFailure.validationRejected.userMessage
+          self.postAPIKeyValidation(false)
+          completion(false)
+        }
       }
     }
-
-    // Assign the new DispatchWorkItem to apiKeyCheckTask so that it can be cancelled later if needed
-    apiKeyCheckTask = task
-
-    // Schedule the task on a background thread with the initial delay
-    DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + delay, execute: task)
   }
 
-  private func executeApiKeyCheckWithRetry(maxRetries: Int, completion: @escaping (Bool) -> Void)
-    async
-  {
-    var retriesLeft = maxRetries
+  /// Explicit validation API used by callers that need to test a supplied candidate. It cannot
+  /// silently fall back to another global credential.
+  func checkApiKey(_ key: String) async -> Result<Void, Error> {
+    let candidate = CredentialSanitizer.sanitize(key)
+    guard !candidate.isEmpty else { return .failure(CredentialFailure.emptyCandidate) }
+    do {
+      try await validator.validate(candidate: candidate)
+      return .success(())
+    } catch {
+      return .failure(CredentialFailure.validationRejected)
+    }
+  }
 
-    // Loop to retry the API key check
-    while retriesLeft > 0 {
-      // Check if the task has been cancelled
-      if Task.isCancelled {
-        print("API Validation Task was cancelled.")
+  func removeCustomKey() {
+    validationTask?.cancel()
+    startupValidationTask?.cancel()
+    viewGeneration &+= 1
+
+    switch editor.removeCredential() {
+    case .removed:
+      applyDraft("")
+      hasCustomCredential = false
+      apiKeyValidationState = .unverified
+      apiKeyErrorMessage = nil
+      isAPIKeyRevealed = false
+    case .rejected(let failure):
+      hasCustomCredential = runtime.activeCredential() != nil
+      apiKeyValidationState = .invalid
+      apiKeyErrorMessage = failure.userMessage
+    }
+  }
+
+  func toggleAPIKeyVisibility() {
+    isAPIKeyRevealed = editor.toggleCredentialVisibility()
+  }
+
+  func hideAPIKey() {
+    editor.hideCredential()
+    isAPIKeyRevealed = false
+  }
+
+  private func handleDraftEdit() {
+    guard !isApplyingDraft else { return }
+
+    let sanitized = CredentialSanitizer.sanitize(apiKey)
+    if sanitized != apiKey {
+      applyDraft(sanitized)
+    }
+
+    let request = editor.prepareReplacement(sanitized)
+    validationTask?.cancel()
+    startupValidationTask?.cancel()
+    viewGeneration &+= 1
+    let generation = viewGeneration
+    apiKeyErrorMessage = nil
+
+    guard !request.isEmpty else {
+      // Clearing the field is only an edit. Deletion requires the explicit Remove action.
+      apiKeyValidationState = hasCustomCredential ? .valid : .unverified
+      return
+    }
+
+    apiKeyValidationState = .unverified
+    validationTask = Task { [weak self, editor] in
+      do {
+        try await Task.sleep(nanoseconds: 250_000_000)
+      } catch {
         return
       }
 
-      let result = await checkApiKey(self.apiKey)  // Asynchronously call the API check
-
-      switch result {
-      case .success:
-        MixpanelHelper.shared.trackEvent(name: "openAIAPIKeyValidationSuccess")
-        completion(true)  // Return true for success
-        return  // Exit the function, no need to retry anymore
-
-      case .failure(let error):
-        MixpanelHelper.shared.trackEvent(
-          name: "openAIAPIKeyValidationFailure", properties: ["error": error.localizedDescription]
-        )
-
-        retriesLeft -= 1
-
-        if retriesLeft > 0 {
-          // Sleep for 10 seconds before retrying (non-blocking)
-          try? await Task.sleep(nanoseconds: 10 * 1_000_000_000)
-        } else {
-          DispatchQueue.main.async {
-            self.userValidatedOwnOpenAIAPIKey(isValid: false)
-          }
-          completion(false)  // Return false after exhausting retries
+      let result = await editor.validateAndReplace(request)
+      await MainActor.run {
+        guard let self, generation == self.viewGeneration else { return }
+        switch result {
+        case .committed:
+          self.applyDraft(sanitized)
+          self.hasCustomCredential = true
+          self.apiKeyValidationState = .valid
+          self.apiKeyErrorMessage = nil
+        case .rejected(let failure):
+          self.hasCustomCredential = self.runtime.activeCredential() != nil
+          self.apiKeyValidationState = .invalid
+          self.apiKeyErrorMessage = failure.userMessage
+        case .superseded:
+          break
         }
       }
     }
   }
 
-  func checkApiKey(_ key: String) async -> Result<Void, Error> {
-    print("DEBUG: Starting API Key check")
-
-    let assistantCreator = GPTAssistantCreator()
-    let assistantBaseName = "ShellMateSuggestCommands"
-    let assistantCurrentVersion: String
-
-    do {
-      assistantCurrentVersion = try getAppVersionAndBuild()
-      print("DEBUG: Retrieved app version and build: \(assistantCurrentVersion)")
-    } catch {
-      print("DEBUG: Error retrieving app version and build: \(error)")
-      DispatchQueue.main.async {
-        self.updateValidationState(.invalid)
-        self.apiKeyErrorMessage = error.localizedDescription
-        self.userValidatedOwnOpenAIAPIKey(isValid: false)
-      }
-      return .failure(error)
-    }
-
-    let assistantInstructions = GPTAssistantInstructions.getInstructions()
-
-    do {
-      let assistantId = try await assistantCreator.getOrUpdateAssistant(
-        assistantBaseName: assistantBaseName,
-        assistantCurrentVersion: assistantCurrentVersion,
-        assistantInstructions: assistantInstructions
-      )
-      print("DEBUG: Assistant ID: \(assistantId)")
-
-      DispatchQueue.main.async {
-        self.apiKeyErrorMessage = nil
-        if !key.isEmpty && key != getHardcodedOpenAIAPIKey() {
-          self.userValidatedOwnOpenAIAPIKey(isValid: true)
-          self.updateValidationState(.valid)
-          MixpanelHelper.shared.trackEvent(name: "userValidatedOwnOpenAIAPIKey")
-        } else {
-          self.updateValidationState(.unverified)  // It is valid, but it was not validated by the user
-          self.userValidatedOwnOpenAIAPIKey(isValid: nil)
-        }
-      }
-      return .success(())
-    } catch {
-      print("DEBUG: Error occurred while setting up GPT Assistant: \(error)")
-      DispatchQueue.main.async {
-        self.updateValidationState(.invalid)
-        self.apiKeyErrorMessage = error.localizedDescription
-
-        if let nsError = error as NSError?,
-          let httpStatusCode = nsError.userInfo["HTTPStatusCode"] as? Int, httpStatusCode == 401
-        {
-          self.userValidatedOwnOpenAIAPIKey(isValid: false)
-        }
-      }
-      return .failure(error)
-    }
+  private func applyDraft(_ draft: String) {
+    isApplyingDraft = true
+    apiKey = draft
+    isApplyingDraft = false
   }
 
-  private func userValidatedOwnOpenAIAPIKey(isValid: Bool?) {
-    if let isValid = isValid {
-      print("User has validated their own OpenAI API Key. Valid: \(isValid)")
-    } else {
-      print("User has validated their own OpenAI API Key. Valid: nil")
+  private func postAPIKeyValidation(_ isValid: Bool?) {
+    var userInfo: [AnyHashable: Any] = [:]
+    if let isValid {
+      userInfo["isValid"] = isValid
     }
     NotificationCenter.default.post(
-      name: .userValidatedOwnOpenAIAPIKey, object: nil, userInfo: ["isValid": isValid as Any])
-  }
-
-  private func updateValidationState(_ state: ApiKeyValidationState) {
-    print("DEBUG: -- method called to update the value of state to : \(state)")
-    self.apiKeyValidationState = state
-    UserDefaults.standard.set(state.rawValue, forKey: "apiKeyValidationState")
-  }
-
-  func sanitizeApiKey(_ text: String) {
-    let sanitized = text.replacingOccurrences(
-      of: "[\\s\\r\\n]+", with: "", options: .regularExpression)
-    // Only update apiKey if sanitized is different to prevent infinite loop
-    if sanitized != apiKey {
-      DispatchQueue.main.async {
-        self.apiKey = sanitized
-      }
-    }
+      name: .userValidatedOwnOpenAIAPIKey,
+      object: nil,
+      userInfo: userInfo
+    )
   }
 }

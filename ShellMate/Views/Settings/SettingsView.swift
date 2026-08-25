@@ -136,46 +136,20 @@ struct ApiKeyView: View {
       HStack {
         Text("OpenAI API Key")
           .frame(width: 150, alignment: .trailing)
-        TextField("Enter OpenAI API Key", text: $licenseViewModel.apiKey)
-          .textFieldStyle(RoundedBorderTextFieldStyle())
+        APIKeyEditorField(licenseViewModel: licenseViewModel)
           .frame(maxWidth: .infinity)
           .padding(.trailing, 60)
       }
-      // Conditionally show the feedback message if the API key is invalid or unverified
+      // Provider failures are converted to safe messages before reaching the view.
       if licenseViewModel.apiKeyValidationState == .invalid {
         HStack {
           Text(" ")
-            .frame(width: 150, alignment: .trailing)  // Adds the same width as "OpenAI API Key"
-
-          if let errorMessage = licenseViewModel.apiKeyErrorMessage?.lowercased() {
-            if errorMessage.contains("the internet connection appears to be offline") {
-              Text("Your device is not connected to the internet")
-                .foregroundColor(.red)
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 60)
-            } else if errorMessage.contains("the request timed out")
-              || errorMessage.contains("the network connection was lost")
-            {
-              Text("Looks like there's a network issue")
-                .foregroundColor(.red)
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 60)
-            } else if errorMessage.contains("failed to list assistants or bad response") {
-              Text("It looks like the API Key is invalid")
-                .foregroundColor(.red)
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 60)
-            } else {
-              Text("API Key is invalid")
-                .foregroundColor(.red)
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 60)
-            }
-          }
+            .frame(width: 150, alignment: .trailing)
+          Text(licenseViewModel.apiKeyErrorMessage ?? "The API key could not be validated.")
+            .foregroundColor(.red)
+            .font(.footnote)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, 60)
         }
       } else if licenseViewModel.apiKeyValidationState == .unverified {
         HStack {

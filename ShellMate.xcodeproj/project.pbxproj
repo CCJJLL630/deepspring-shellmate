@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E40000000000000000000001 /* CredentialManagement.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000011 /* CredentialManagement.swift */; };
+		E40000000000000000000002 /* CredentialEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000012 /* CredentialEditor.swift */; };
+		E40000000000000000000003 /* SystemCredentialStores.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000013 /* SystemCredentialStores.swift */; };
+		E40000000000000000000004 /* SystemCredentialIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000014 /* SystemCredentialIntegration.swift */; };
+		E40000000000000000000005 /* APIKeyEditorField.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000015 /* APIKeyEditorField.swift */; };
 		C30000000000000000000001 /* AttachmentGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000003 /* AttachmentGeometry.swift */; };
 		C30000000000000000000002 /* SystemAttachmentGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000004 /* SystemAttachmentGeometry.swift */; };
 		B20000000000000000000001 /* OpenAILifecycleTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* OpenAILifecycleTypes.swift */; };
@@ -93,6 +98,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E40000000000000000000011 /* CredentialManagement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialManagement.swift; sourceTree = "<group>"; };
+		E40000000000000000000012 /* CredentialEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialEditor.swift; sourceTree = "<group>"; };
+		E40000000000000000000013 /* SystemCredentialStores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCredentialStores.swift; sourceTree = "<group>"; };
+		E40000000000000000000014 /* SystemCredentialIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCredentialIntegration.swift; sourceTree = "<group>"; };
+		E40000000000000000000015 /* APIKeyEditorField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeyEditorField.swift; sourceTree = "<group>"; };
 		C30000000000000000000003 /* AttachmentGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentGeometry.swift; sourceTree = "<group>"; };
 		C30000000000000000000004 /* SystemAttachmentGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAttachmentGeometry.swift; sourceTree = "<group>"; };
 		B20000000000000000000004 /* OpenAILifecycleTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAILifecycleTypes.swift; sourceTree = "<group>"; };
@@ -176,6 +186,24 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E40000000000000000000021 /* CredentialManagement */ = {
+			isa = PBXGroup;
+			children = (
+				E40000000000000000000011 /* CredentialManagement.swift */,
+				E40000000000000000000012 /* CredentialEditor.swift */,
+				E40000000000000000000013 /* SystemCredentialStores.swift */,
+			);
+			path = CredentialManagement;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000022 /* CredentialIntegration */ = {
+			isa = PBXGroup;
+			children = (
+				E40000000000000000000014 /* SystemCredentialIntegration.swift */,
+			);
+			path = CredentialIntegration;
+			sourceTree = "<group>";
+		};
 		C30000000000000000000005 /* AttachmentGeometry */ = {
 			isa = PBXGroup;
 			children = (
@@ -324,6 +352,8 @@
 		DC9B38882C24FFEA006755AE /* ShellMate */ = {
 			isa = PBXGroup;
 			children = (
+				E40000000000000000000021 /* CredentialManagement */,
+				E40000000000000000000022 /* CredentialIntegration */,
 				C30000000000000000000005 /* AttachmentGeometry */,
 				B20000000000000000000007 /* OpenAILifecycle */,
 				A10000000000000000000005 /* SuggestionLookup */,
@@ -368,6 +398,7 @@
 		DCA94B652C2C98FA004A2BCE /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				E40000000000000000000015 /* APIKeyEditorField.swift */,
 				DCB25E972C84E7BA00D5FACF /* Suggestions */,
 				DC38CB252C83B18F0073870B /* EmptyState */,
 				DC26CDE02C7FDF77001FD7DF /* Banners */,
@@ -547,6 +578,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E40000000000000000000001 /* CredentialManagement.swift in Sources */,
+				E40000000000000000000002 /* CredentialEditor.swift in Sources */,
+				E40000000000000000000003 /* SystemCredentialStores.swift in Sources */,
+				E40000000000000000000004 /* SystemCredentialIntegration.swift in Sources */,
+				E40000000000000000000005 /* APIKeyEditorField.swift in Sources */,
 				C30000000000000000000001 /* AttachmentGeometry.swift in Sources */,
 				C30000000000000000000002 /* SystemAttachmentGeometry.swift in Sources */,
 				B20000000000000000000001 /* OpenAILifecycleTypes.swift in Sources */,

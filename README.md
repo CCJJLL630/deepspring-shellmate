@@ -30,15 +30,9 @@ git clone git@github.com:srosro/deepspring-shellmate.git
 To run from source, open and build the repository in Xcode.
 
 ### OpenAI API Key Setup
-This app includes a free-tier usage feature, but the API key has been deleted. To use it, you'll need to update the hardcoded variable with your own API key at line 16 in the `Utils.swift` file located at `ShellMate/Helpers/Utils.swift` in the repository.
+ShellMate includes complimentary usage. You can optionally add your own OpenAI API key in the onboarding window or in **Settings → General**. Custom keys are stored as generic-password credentials in the macOS Keychain, are masked by default, and can be removed at any time to return to complimentary-tier behavior.
 
-```swift
-func getHardcodedOpenAIAPIKey() -> String {
-    return "your-openai-api-key-here"
-}
-```
-
-Alternatively, you can add your OpenAI API key directly in the settings or permissions view, which allows the key to be used without hardcoding it.
+Do not hardcode an API key in the source tree or put one in `UserDefaults`, configuration files, logs, or issue reports.
 
 
 ## Setting Up Secrets and Sentry Authentication Token for ShellMate
