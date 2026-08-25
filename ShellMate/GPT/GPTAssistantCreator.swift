@@ -6,19 +6,14 @@
 //
 
 import Foundation
-import Sentry
 
 class GPTAssistantCreator {
   let apiKey: String
   let headers: [String: String]
 
-  init() {
-    self.apiKey = retrieveOpenaiAPIKey()
-    self.headers = [
-      "Content-Type": "application/json",
-      "Authorization": "Bearer \(apiKey)",
-      "OpenAI-Beta": "assistants=v2",
-    ]
+  init(apiKey: String = retrieveOpenaiAPIKey()) {
+    self.apiKey = apiKey
+    self.headers = OpenAIAuthorization.headers(for: apiKey)
   }
 
   func getOrUpdateAssistant(
@@ -64,13 +59,7 @@ class GPTAssistantCreator {
     ]
     request.httpBody = try? JSONSerialization.data(withJSONObject: instructions)
 
-    print("createAssistant - Request: \(request)")
-    print("createAssistant - Instructions: \(instructions)")
-
     let (data, response) = try await URLSession.shared.dataWithTimeout(for: request)
-
-    print("createAssistant - Response: \(response)")
-    print("createAssistant - Data: \(String(data: data, encoding: .utf8) ?? "No data")")
 
     guard let response = response as? HTTPURLResponse, response.statusCode == 200,
       let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -81,7 +70,6 @@ class GPTAssistantCreator {
         userInfo: [
           NSLocalizedDescriptionKey: "Create Assistant - Failed to parse JSON or bad response"
         ])
-      SentrySDK.capture(error: error)
       throw error
     }
 
@@ -94,12 +82,7 @@ class GPTAssistantCreator {
     request.httpMethod = "GET"
     request.allHTTPHeaderFields = headers
 
-    print("listAssistants - Request: \(request)")
-
     let (data, response) = try await URLSession.shared.dataWithTimeout(for: request)
-
-    print("listAssistants - Response: \(response)")
-    print("listAssistants - Data: \(String(data: data, encoding: .utf8) ?? "No data")")
 
     guard let response = response as? HTTPURLResponse, response.statusCode == 200,
       let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -111,7 +94,6 @@ class GPTAssistantCreator {
           NSLocalizedDescriptionKey: "Failed to list assistants or bad response",
           "HTTPStatusCode": (response as? HTTPURLResponse)?.statusCode ?? 0,
         ])
-      SentrySDK.capture(error: error)
       throw error
     }
 

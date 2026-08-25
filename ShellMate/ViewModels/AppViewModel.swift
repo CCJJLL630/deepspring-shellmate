@@ -139,6 +139,8 @@ class AppViewModel: ObservableObject {
       forKey: GPTSuggestionsFreeTierCountKey)
     self.hasGPTSuggestionsFreeTierCountReachedLimit = UserDefaults.standard.bool(
       forKey: hasGPTSuggestionsFreeTierCountReachedLimitKey)
+    self.hasUserValidatedOwnOpenAIAPIKey =
+      hasCustomOpenAIAPIKey() ? .valid : .usingFreeTier
     updateHasGPTSuggestionsFreeTierCountReachedLimit()
 
     NotificationCenter.default.addObserver(
@@ -383,8 +385,11 @@ class AppViewModel: ObservableObject {
       // Step 1: Determine the new validation state
       self.determineAPIKeyValidationState(from: notification)
 
-      // Step 2: Process the assistant initialization for valid or acceptable free tier usage
-      if self.hasUserValidatedOwnOpenAIAPIKey == .valid
+      // A committed replacement/removal always reloads authorization and invalidates threads.
+      // Launch-time validation retains the existing free-tier gating behavior.
+      let credentialChanged = notification.userInfo?["credentialChanged"] as? Bool == true
+      if credentialChanged
+        || self.hasUserValidatedOwnOpenAIAPIKey == .valid
         || (self.hasUserValidatedOwnOpenAIAPIKey == .usingFreeTier
           && !self.hasGPTSuggestionsFreeTierCountReachedLimit)
       {
@@ -417,7 +422,14 @@ class AppViewModel: ObservableObject {
   }
 
   private func determineAPIKeyValidationState(from notification: Notification) {
-    if let userInfo = notification.userInfo, let isValid = userInfo["isValid"] as? Bool {
+    if notification.userInfo?["credentialChanged"] as? Bool == true {
+      // Derive committed state from the credential runtime. This remains correct even if main-queue
+      // delivery of rapid replacement/removal notifications is coalesced or reordered.
+      self.hasUserValidatedOwnOpenAIAPIKey =
+        hasCustomOpenAIAPIKey() ? .valid : .usingFreeTier
+    } else if let userInfo = notification.userInfo,
+      let isValid = userInfo["isValid"] as? Bool
+    {
       self.hasUserValidatedOwnOpenAIAPIKey = isValid ? .valid : .invalid
     } else {
       print("DEBUG: User's API key validation state is unknown (nil)")
@@ -428,16 +440,12 @@ class AppViewModel: ObservableObject {
   }
 
   private func processAssistantInitialization() {
+    // Never reuse a thread created under the credential being replaced or removed.
+    GPTAssistantThreadIDManager.shared.removeAllThreadIds()
     Task {
       print("DEBUG: Starting assistant initialization")
       await self.initializeAssistant()
-      DispatchQueue.main.async {
-        print("DEBUG: Assistant initialization completed")
-
-        // Clear the entire threadIdDict
-        GPTAssistantThreadIDManager.shared.removeAllThreadIds()
-        print("DEBUG: threadIdDict cleared")
-      }
+      print("DEBUG: Assistant initialization completed")
     }
   }
 

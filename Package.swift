@@ -9,6 +9,7 @@ let package = Package(
     .library(name: "SuggestionLookup", targets: ["SuggestionLookup"]),
     .library(name: "OpenAILifecycle", targets: ["OpenAILifecycle"]),
     .library(name: "AttachmentGeometry", targets: ["AttachmentGeometry"]),
+    .library(name: "CredentialManagement", targets: ["CredentialManagement"]),
   ],
   targets: [
     .target(
@@ -37,6 +38,15 @@ let package = Package(
       name: "AttachmentGeometryTests",
       dependencies: ["AttachmentGeometry"],
       path: "Tests/AttachmentGeometryTests"
+    ),
+    .target(
+      name: "CredentialManagement",
+      path: "ShellMate/CredentialManagement"
+    ),
+    .testTarget(
+      name: "CredentialManagementTests",
+      dependencies: ["CredentialManagement"],
+      path: "Tests/CredentialManagementTests"
     ),
   ]
 )

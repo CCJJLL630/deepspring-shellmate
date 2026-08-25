@@ -11,17 +11,20 @@ import CoreGraphics
 import Foundation
 import Mixpanel
 
-/// Retrieve the API key from UserDefaults
+/// The bundled credential retains the existing complimentary-tier behavior. User-provided keys
+/// are resolved separately through `ShellMateCredentialRuntime` and are never stored in defaults.
 func getHardcodedOpenAIAPIKey() -> String {
   return "sk-proj"
 }
 
 func retrieveOpenaiAPIKey() -> String {
-  if let apiKey = UserDefaults.standard.string(forKey: "apiKey"), !apiKey.isEmpty {
-    return apiKey
-  } else {
-    return getHardcodedOpenAIAPIKey()
-  }
+  ShellMateCredentialRuntime.shared.credentialForAuthorization(
+    fallback: getHardcodedOpenAIAPIKey()
+  )
+}
+
+func hasCustomOpenAIAPIKey() -> Bool {
+  ShellMateCredentialRuntime.shared.activeCredential() != nil
 }
 
 func showPermissionsView() {

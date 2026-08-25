@@ -149,35 +149,13 @@ struct LicenseView: View {
         }
         .padding(.bottom, 10)  // Adding some padding at the bottom of the text
 
-        TextField("Enter OpenAI API Key", text: $licenseViewModel.apiKey)
-          .textFieldStyle(RoundedBorderTextFieldStyle())
-        // Conditionally show the feedback message if the API key is invalid
+        APIKeyEditorField(licenseViewModel: licenseViewModel)
+        // Only safe, application-authored messages are presented; provider errors are discarded.
         if licenseViewModel.apiKeyValidationState == .invalid {
-          if let errorMessage = licenseViewModel.apiKeyErrorMessage?.lowercased() {
-            if errorMessage.contains("the internet connection appears to be offline") {
-              Text("Your device is not connected to the internet")
-                .foregroundColor(.red)
-                .font(.footnote)
-                .padding(.top, 5)
-            } else if errorMessage.contains("the request timed out")
-              || errorMessage.contains("the network connection was lost")
-            {
-              Text("Looks like there's a network issue")
-                .foregroundColor(.red)
-                .font(.footnote)
-                .padding(.top, 5)
-            } else if errorMessage.contains("failed to list assistants or bad response") {
-              Text("It looks like the API Key is invalid")
-                .foregroundColor(.red)
-                .font(.footnote)
-                .padding(.top, 5)
-            } else {
-              Text("API Key is invalid")
-                .foregroundColor(.red)
-                .font(.footnote)
-                .padding(.top, 5)
-            }
-          }
+          Text(licenseViewModel.apiKeyErrorMessage ?? "The API key could not be validated.")
+            .foregroundColor(.red)
+            .font(.footnote)
+            .padding(.top, 5)
         } else if licenseViewModel.apiKeyValidationState == .unverified {
           Text(
             "\(appViewModel.GPTSuggestionsFreeTierCount)/\(appViewModel.GPTSuggestionsFreeTierLimit) complimentary AI responses used"

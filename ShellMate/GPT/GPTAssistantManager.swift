@@ -24,11 +24,7 @@ class GPTAssistantManager {
   ) {
     self.apiKey = retrieveOpenaiAPIKey()
     self.assistantId = ""
-    self.headers = [
-      "Content-Type": "application/json",
-      "Authorization": "Bearer \(apiKey)",
-      "OpenAI-Beta": "assistants=v2",
-    ]
+    self.headers = OpenAIAuthorization.headers(for: apiKey)
     self.lifecycleClient = OpenAIAssistantClient(
       transport: transport,
       clock: clock,
@@ -38,13 +34,9 @@ class GPTAssistantManager {
 
   func setupAssistant() async -> Bool {
     self.apiKey = retrieveOpenaiAPIKey()
-    self.headers = [
-      "Content-Type": "application/json",
-      "Authorization": "Bearer \(apiKey)",
-      "OpenAI-Beta": "assistants=v2",
-    ]
+    self.headers = OpenAIAuthorization.headers(for: apiKey)
 
-    let assistantCreator = GPTAssistantCreator()
+    let assistantCreator = GPTAssistantCreator(apiKey: apiKey)
     let assistantBaseName = "ShellMateSuggestCommands"
     let assistantCurrentVersion: String
     do {
@@ -66,8 +58,12 @@ class GPTAssistantManager {
       self.assistantId = assistantId
       return true
     } catch {
-      print("Error occurred while setting up GPT Assistant: \(error.localizedDescription)")
-      SentrySDK.capture(error: error)
+      // Do not persist or log provider errors: an upstream failure can echo submitted data.
+      let safeError = NSError(
+        domain: "GPTAssistantSetup", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Assistant setup failed"]
+      )
+      SentrySDK.capture(error: safeError)
       return false
     }
   }
