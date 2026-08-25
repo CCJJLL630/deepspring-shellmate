@@ -133,6 +133,18 @@ final class TerminalObservationTests: XCTestCase {
     }
   }
 
+  func testLineConfigurationCannotExceedFiftyLogicalLines() {
+    let value = (1...75).map { "line-\($0)" }.joined(separator: "\n")
+    let formatter = TerminalContextFormatter(
+      configuration: .init(maximumLines: 500, contextBudgetUTF16Units: 65_536))
+
+    let snapshot = formatter.snapshot(from: value)
+
+    XCTAssertEqual(formatter.configuration.maximumLines, 50)
+    XCTAssertEqual(snapshot.context, (26...75).map { "line-\($0)" }.joined(separator: "\n"))
+    XCTAssertEqual(snapshot.context.split(separator: "\n").count, 50)
+  }
+
   func testMeaningfulChangeAndBlankLineSuppressionRemainTerminalSpecific() throws {
     let session = TerminalObservationSession<String>(
       configuration: .init(maximumLines: 50, contextBudgetUTF16Units: 4_096))

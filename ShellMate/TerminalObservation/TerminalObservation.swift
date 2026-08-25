@@ -25,11 +25,14 @@ public protocol TerminalTextSource: AnyObject {
 }
 
 public struct TerminalObservationConfiguration: Equatable {
-  public var maximumLines: Int
-  public var contextBudgetUTF16Units: Int
+  public let maximumLines: Int
+  public let contextBudgetUTF16Units: Int
 
   public init(maximumLines: Int = 50, contextBudgetUTF16Units: Int = 32 * 1_024) {
-    self.maximumLines = max(1, maximumLines)
+    // Terminal observations are deliberately capped at the existing 50-line payload. Keeping a
+    // configurable lower limit is useful for focused consumers and tests, but no caller may expand
+    // the observation beyond that product contract.
+    self.maximumLines = min(50, max(1, maximumLines))
     self.contextBudgetUTF16Units = max(1, contextBudgetUTF16Units)
   }
 }
