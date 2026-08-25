@@ -27,6 +27,12 @@ jobs:
 
       - name: Xcode generated-package tests
         run: |
+          package_dir="$(mktemp -d)"
+          cp Package.swift "$package_dir/"
+          mkdir -p "$package_dir/ShellMate" "$package_dir/Tests"
+          cp -R ShellMate/SuggestionLookup ShellMate/OpenAILifecycle ShellMate/AttachmentGeometry "$package_dir/ShellMate/"
+          cp -R Tests/SuggestionLookupTests Tests/OpenAILifecycleTests Tests/AttachmentGeometryTests "$package_dir/Tests/"
+          cd "$package_dir"
           xcodebuild -list
           xcodebuild \
             -scheme ShellMateSuggestionLookup-Package \
