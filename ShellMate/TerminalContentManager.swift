@@ -6,9 +6,8 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
   var terminalTextAreaElement: AXUIElement?
   var terminalTextObserver: Observer?
   var highlightTextObserver: Observer?
-  var previousTerminalText: String?
   var previousHighlightedText: String?
-  var previousActiveLinesByTerminal: [CGWindowID: String] = [:]
+  private let terminalObservationSession = TerminalObservationSession<CGWindowID>()
   var textDebounceWorkItem: DispatchWorkItem?
   var highlightDebounceWorkItem: DispatchWorkItem?
   var activeLineDebounceWorkItem: DispatchWorkItem?
@@ -47,21 +46,27 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
 
     print("Received notification for terminal window change. Window ID: \(windowID)")
 
-    // Remove old observers before adding new ones
+    // Remove old observers before adding new ones. Selecting the Terminal invalidates every
+    // revision captured by the previous observer, including delayed debounce work.
     removeTerminalTextObserver()
     removeHighlightObserver()
+    terminalObservationSession.selectTerminal(windowID)
+    currentTerminalWindowID = windowID
+    terminalTextAreaElement = nil
 
-    // Update the terminal text area element based on the new window information
+    // Update the terminal text area element based on the new window information.
     if let textAreaElement = findTextAreaElement(in: windowElement) {
       terminalTextAreaElement = textAreaElement
-      currentTerminalWindowID = windowID  // Update the current terminal window ID
       startTerminalTextObserver(for: textAreaElement)
       startHighlightObserver(for: textAreaElement)
 
       // Associate the active line with this window immediately. Waiting for the next value change
-      // could leave selection handling with the line from a previously focused Terminal.
-      if let sanitizedText = getSanitizedTerminalText(from: textAreaElement) {
-        postTerminalActiveLineChangedNotification(text: getLastLine(from: sanitizedText))
+      // could leave selection handling without the line for the newly focused Terminal.
+      if let revision = terminalObservationSession.beginRevision(
+        for: windowID,
+        source: AXTerminalTextSource(element: textAreaElement))
+      {
+        processActiveLine(for: revision)
       }
     } else {
       NSLog("AXTextArea element not found in the new terminal window")
@@ -120,65 +125,46 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
     }
   }
 
-  func processTerminalText() {
-    guard let element = terminalTextAreaElement else { return }
-
-    if let sanitizedText = getSanitizedTerminalText(from: element) {
-      let alphanumericText = sanitizedText.replacingOccurrences(
-        of: "\\W+", with: "", options: .regularExpression)
-
-      if alphanumericText != previousTerminalText && !alphanumericText.isEmpty {
-        previousTerminalText = alphanumericText
-        //printTerminalText(sanitizedText, windowID: currentTerminalWindowID)
-
-        // Log the event when terminal change is identified
-        MixpanelHelper.shared.trackEvent(name: "terminalTextChangeIdentified")
-
-        let last50Lines = getLastNLines(from: sanitizedText, numberOfLines: 50)
-        checkForErrorKeywords(in: last50Lines)
-        checkForCommandNotFound(in: last50Lines)
-        // Obfuscate sensitive information
-        let obfuscatedLast50Lines = obfuscateAuthTokens(in: last50Lines)
-
-        // Send notifications
-        sendContentAnalysisNotification(
-          text: obfuscatedLast50Lines, windowID: currentTerminalWindowID, source: "terminalContent")
+  private func processTerminalText(
+    for revision: TerminalObservationRevision<CGWindowID>
+  ) {
+    do {
+      guard let observation = try terminalObservationSession.analysis(for: revision) else {
+        return
       }
-    } else {
-      print("Error retrieving text")
+
+      // Log the event when terminal change is identified.
+      MixpanelHelper.shared.trackEvent(name: "terminalTextChangeIdentified")
+
+      checkForErrorKeywords(in: observation.text)
+      checkForCommandNotFound(in: observation.text)
+      let obfuscatedText = obfuscateAuthTokens(in: observation.text)
+
+      sendContentAnalysisNotification(
+        text: obfuscatedText,
+        windowID: observation.terminalID,
+        source: "terminalContent")
+    } catch {
+      NSLog("Error retrieving Terminal text: \(error.localizedDescription)")
     }
   }
 
-  private func getSanitizedTerminalText(from element: AXUIElement) -> String? {
-    var textValue: AnyObject?
-    let textError = AXUIElementCopyAttributeValue(
-      element, kAXValueAttribute as CFString, &textValue)
-
-    if textError == .success, let textValue = textValue as? String {
-      let sanitizedText = textValue.replacingOccurrences(
-        of: "\n+", with: "\n", options: .regularExpression)
-      return sanitizedText
-    } else {
-      return nil
+  private func processActiveLine(
+    for revision: TerminalObservationRevision<CGWindowID>
+  ) {
+    do {
+      guard let observation = try terminalObservationSession.activeLine(for: revision) else {
+        return
+      }
+      postTerminalActiveLineChangedNotification(
+        text: observation.activeLine,
+        windowID: observation.terminalID)
+    } catch {
+      NSLog("Error retrieving Terminal active line: \(error.localizedDescription)")
     }
   }
 
-  private func getLastLine(from text: String) -> String {
-    let lines = text.split(separator: "\n")
-    return lines.last.map(String.init) ?? ""
-  }
-
-  private func getLastNLines(from text: String, numberOfLines: Int) -> String {
-    let lines = text.split(separator: "\n")
-    let lastNLines = lines.suffix(numberOfLines).joined(separator: "\n")
-    return lastNLines
-  }
-
-  private func postTerminalActiveLineChangedNotification(text: String) {
-    guard let windowID = currentTerminalWindowID else { return }
-    guard text != previousActiveLinesByTerminal[windowID] else { return }
-    previousActiveLinesByTerminal[windowID] = text
-
+  private func postTerminalActiveLineChangedNotification(text: String, windowID: CGWindowID) {
     let userInfo: [String: Any] = [
       "activeLine": text,
       "terminalWindowID": windowID,
@@ -200,80 +186,66 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
       name: .requestTerminalContentAnalysis, object: nil, userInfo: userInfo)
   }
 
-  func debounceActiveLineChange() {
-    guard let element = terminalTextAreaElement, let windowID = currentTerminalWindowID else {
-      return
-    }
-
+  private func debounceActiveLineChange(
+    for revision: TerminalObservationRevision<CGWindowID>
+  ) {
     activeLineDebounceWorkItem?.cancel()
     let workItem = DispatchWorkItem { [weak self] in
-      guard let self = self, self.currentTerminalWindowID == windowID else { return }
-      if let sanitizedText = self.getSanitizedTerminalText(from: element) {
-        let lastLine = self.getLastLine(from: sanitizedText)
-        self.postTerminalActiveLineChangedNotification(text: lastLine)
-      }
+      self?.processActiveLine(for: revision)
     }
     activeLineDebounceWorkItem = workItem
     DispatchQueue.main.asyncAfter(deadline: .now() + activeLineDebouncePeriod, execute: workItem)
   }
 
-  func debounceTerminalTextChange() {
-    // Cancel any previous pre-debounce work item immediately
+  private func debounceTerminalTextChange(
+    for revision: TerminalObservationRevision<CGWindowID>
+  ) {
+    // Cancel any previous pre-debounce work item immediately.
     preTextDebounceWorkItem?.cancel()
 
-    // Increment the cancel counter
+    // Increment the cancel counter.
     debounceTextCancelCount += 1
 
-    // Check if the cancel counter has reached the threshold
+    // Check if the cancel counter has reached the threshold.
     if debounceTextCancelCount >= 10 {
-      // Remove the text observer
       removeTerminalTextObserver()
-
-      // Reset the cancel counter
       debounceTextCancelCount = 0
-
-      // Store the current terminal window ID
       let currentWindowID = currentTerminalWindowID
 
-      // Re-add the text observer after a delay
+      // Re-add the text observer after a delay.
       DispatchQueue.main.asyncAfter(deadline: .now() + reAddTextObserverPeriod) { [weak self] in
         guard let self = self, let element = self.terminalTextAreaElement else { return }
-        // Check if the terminal window ID is still the same
         if self.currentTerminalWindowID == currentWindowID {
           self.startTerminalTextObserver(for: element)
         }
       }
     } else {
-      // Create a new pre-debounce DispatchWorkItem
       let preDebounceWorkItem = DispatchWorkItem { [weak self] in
-        self?.executeMainTextDebounce()
-        // Reset the cancel counter when the debouncer item gets executed
-        self?.debounceTextCancelCount = 0
+        guard let self = self, self.terminalObservationSession.isCurrent(revision) else {
+          return
+        }
+        self.executeMainTextDebounce(for: revision)
+        self.debounceTextCancelCount = 0
       }
 
-      // Assign the new work item to the preTextDebounceWorkItem variable
       preTextDebounceWorkItem = preDebounceWorkItem
-
-      // Schedule the execution of the pre-debounce work item after a short delay
       DispatchQueue.main.asyncAfter(
         deadline: .now() + preDebounceTextPeriod, execute: preDebounceWorkItem)
     }
   }
 
-  private func executeMainTextDebounce() {
+  private func executeMainTextDebounce(
+    for revision: TerminalObservationRevision<CGWindowID>
+  ) {
     NotificationCenter.default.post(name: .terminalContentChangeStarted, object: nil)
     textDebounceWorkItem?.cancel()
 
-    // Create the main debounce work item
     let workItem = DispatchWorkItem { [weak self] in
-      self?.processTerminalText()
+      self?.processTerminalText(for: revision)
       NotificationCenter.default.post(name: .terminalContentChangeEnded, object: nil)
     }
 
-    // Assign the new work item to the textDebounceWorkItem variable
     textDebounceWorkItem = workItem
-
-    // Schedule the execution of the main work item after the main debounce delay
     DispatchQueue.main.asyncAfter(deadline: .now() + mainDebounceTextPeriod, execute: workItem)
 
     print("New main text debounce work item created")
@@ -367,14 +339,23 @@ class TerminalContentManager: NSObject, NSApplicationDelegate {
       return
     }
 
+    let observedWindowID = currentTerminalWindowID
     terminalTextObserver = app.createObserver {
       [weak self]
-      (observer: Observer, element: UIElement, event: AXNotification, info: [String: AnyObject]?) in
-      guard let self = self else { return }
-      if event == .valueChanged {
-        self.debounceTerminalTextChange()
-        self.debounceActiveLineChange()
+      (observer: Observer, observedElement: UIElement, event: AXNotification,
+        info: [String: AnyObject]?) in
+      guard let self = self, event == .valueChanged,
+        let windowID = observedWindowID,
+        self.currentTerminalWindowID == windowID,
+        let revision = self.terminalObservationSession.beginRevision(
+          for: windowID,
+          source: AXTerminalTextSource(element: element))
+      else {
+        return
       }
+
+      self.debounceTerminalTextChange(for: revision)
+      self.debounceActiveLineChange(for: revision)
     }
 
     do {

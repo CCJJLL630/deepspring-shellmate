@@ -10,6 +10,7 @@ let package = Package(
     .library(name: "OpenAILifecycle", targets: ["OpenAILifecycle"]),
     .library(name: "AttachmentGeometry", targets: ["AttachmentGeometry"]),
     .library(name: "CredentialManagement", targets: ["CredentialManagement"]),
+    .library(name: "TerminalObservation", targets: ["TerminalObservation"]),
   ],
   targets: [
     .target(
@@ -47,6 +48,15 @@ let package = Package(
       name: "CredentialManagementTests",
       dependencies: ["CredentialManagement"],
       path: "Tests/CredentialManagementTests"
+    ),
+    .target(
+      name: "TerminalObservation",
+      path: "ShellMate/TerminalObservation"
+    ),
+    .testTarget(
+      name: "TerminalObservationTests",
+      dependencies: ["TerminalObservation"],
+      path: "Tests/TerminalObservationTests"
     ),
   ]
 )

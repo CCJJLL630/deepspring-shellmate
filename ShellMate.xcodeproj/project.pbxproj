@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F50000000000000000000001 /* TerminalObservation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000011 /* TerminalObservation.swift */; };
+		F50000000000000000000002 /* AXTerminalTextSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000012 /* AXTerminalTextSource.swift */; };
 		E40000000000000000000001 /* CredentialManagement.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000011 /* CredentialManagement.swift */; };
 		E40000000000000000000002 /* CredentialEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000012 /* CredentialEditor.swift */; };
 		E40000000000000000000003 /* SystemCredentialStores.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000013 /* SystemCredentialStores.swift */; };
@@ -98,6 +100,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F50000000000000000000011 /* TerminalObservation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalObservation.swift; sourceTree = "<group>"; };
+		F50000000000000000000012 /* AXTerminalTextSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXTerminalTextSource.swift; sourceTree = "<group>"; };
 		E40000000000000000000011 /* CredentialManagement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialManagement.swift; sourceTree = "<group>"; };
 		E40000000000000000000012 /* CredentialEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialEditor.swift; sourceTree = "<group>"; };
 		E40000000000000000000013 /* SystemCredentialStores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCredentialStores.swift; sourceTree = "<group>"; };
@@ -186,6 +190,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		F50000000000000000000021 /* TerminalObservation */ = {
+			isa = PBXGroup;
+			children = (
+				F50000000000000000000011 /* TerminalObservation.swift */,
+			);
+			path = TerminalObservation;
+			sourceTree = "<group>";
+		};
+		F50000000000000000000022 /* TerminalObservationIntegration */ = {
+			isa = PBXGroup;
+			children = (
+				F50000000000000000000012 /* AXTerminalTextSource.swift */,
+			);
+			path = TerminalObservationIntegration;
+			sourceTree = "<group>";
+		};
 		E40000000000000000000021 /* CredentialManagement */ = {
 			isa = PBXGroup;
 			children = (
@@ -352,6 +372,8 @@
 		DC9B38882C24FFEA006755AE /* ShellMate */ = {
 			isa = PBXGroup;
 			children = (
+				F50000000000000000000021 /* TerminalObservation */,
+				F50000000000000000000022 /* TerminalObservationIntegration */,
 				E40000000000000000000021 /* CredentialManagement */,
 				E40000000000000000000022 /* CredentialIntegration */,
 				C30000000000000000000005 /* AttachmentGeometry */,
@@ -578,6 +600,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F50000000000000000000001 /* TerminalObservation.swift in Sources */,
+				F50000000000000000000002 /* AXTerminalTextSource.swift in Sources */,
 				E40000000000000000000001 /* CredentialManagement.swift in Sources */,
 				E40000000000000000000002 /* CredentialEditor.swift in Sources */,
 				E40000000000000000000003 /* SystemCredentialStores.swift in Sources */,
