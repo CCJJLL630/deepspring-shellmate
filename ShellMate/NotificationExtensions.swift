@@ -39,7 +39,7 @@ extension Notification.Name {
   /// Notification to update the ghost window state.
   /// userInfo dictionary should contain:
   /// - "action": String (the action to perform, e.g., "update", "show", "hide")
-  /// - "terminalPosition": NSRect (the new position of the ghost window, required if action is "update")
+  /// - "attachmentPlacement": AttachmentPlacement (shared final/preview geometry for "update" or "show")
   static let ghostWindowStateDidChange = Notification.Name("ghostWindowStateDidChange")
   /// Notification to indicate the mouse position is close to a terminal window border.
   /// userInfo dictionary should contain:

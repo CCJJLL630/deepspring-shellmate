@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C30000000000000000000001 /* AttachmentGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000003 /* AttachmentGeometry.swift */; };
+		C30000000000000000000002 /* SystemAttachmentGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000004 /* SystemAttachmentGeometry.swift */; };
 		B20000000000000000000001 /* OpenAILifecycleTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* OpenAILifecycleTypes.swift */; };
 		B20000000000000000000002 /* OpenAITransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* OpenAITransport.swift */; };
 		B20000000000000000000003 /* OpenAIAssistantClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* OpenAIAssistantClient.swift */; };
@@ -91,6 +93,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C30000000000000000000003 /* AttachmentGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentGeometry.swift; sourceTree = "<group>"; };
+		C30000000000000000000004 /* SystemAttachmentGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAttachmentGeometry.swift; sourceTree = "<group>"; };
 		B20000000000000000000004 /* OpenAILifecycleTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAILifecycleTypes.swift; sourceTree = "<group>"; };
 		B20000000000000000000005 /* OpenAITransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAITransport.swift; sourceTree = "<group>"; };
 		B20000000000000000000006 /* OpenAIAssistantClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIAssistantClient.swift; sourceTree = "<group>"; };
@@ -172,6 +176,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C30000000000000000000005 /* AttachmentGeometry */ = {
+			isa = PBXGroup;
+			children = (
+				C30000000000000000000003 /* AttachmentGeometry.swift */,
+				C30000000000000000000004 /* SystemAttachmentGeometry.swift */,
+			);
+			path = AttachmentGeometry;
+			sourceTree = "<group>";
+		};
 		B20000000000000000000007 /* OpenAILifecycle */ = {
 			isa = PBXGroup;
 			children = (
@@ -311,6 +324,7 @@
 		DC9B38882C24FFEA006755AE /* ShellMate */ = {
 			isa = PBXGroup;
 			children = (
+				C30000000000000000000005 /* AttachmentGeometry */,
 				B20000000000000000000007 /* OpenAILifecycle */,
 				A10000000000000000000005 /* SuggestionLookup */,
 				527465472CA2E31100C9760E /* Services */,
@@ -533,6 +547,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C30000000000000000000001 /* AttachmentGeometry.swift in Sources */,
+				C30000000000000000000002 /* SystemAttachmentGeometry.swift in Sources */,
 				B20000000000000000000001 /* OpenAILifecycleTypes.swift in Sources */,
 				B20000000000000000000002 /* OpenAITransport.swift in Sources */,
 				B20000000000000000000003 /* OpenAIAssistantClient.swift in Sources */,

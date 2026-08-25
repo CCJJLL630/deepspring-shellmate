@@ -1,0 +1,67 @@
+name: Verify attachment geometry macOS integration
+
+on:
+  push:
+    branches: [verify-geometry]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 15.4 and show toolchains
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: SwiftPM geometry tests
+        run: swift test --filter AttachmentGeometryTests
+
+      - name: SwiftPM all tests
+        run: swift test
+
+      - name: Xcode generated-package tests
+        run: |
+          xcodebuild -list
+          xcodebuild \
+            -scheme ShellMateSuggestionLookup-Package \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Prepare placeholder build configuration
+        run: cp Template.Secrets.xcconfig Secrets.xcconfig
+
+      - name: Resolve application dependencies
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project ShellMate.xcodeproj \
+            -scheme ShellMate
+
+      - name: Build application
+        run: |
+          xcodebuild \
+            -project ShellMate.xcodeproj \
+            -scheme ShellMate \
+            -configuration Debug \
+            -sdk macosx \
+            -derivedDataPath /tmp/ShellMateDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build CLI
+        run: |
+          xcodebuild \
+            -project ShellMate.xcodeproj \
+            -scheme ShellMateCLI \
+            -configuration Debug \
+            -sdk macosx \
+            -derivedDataPath /tmp/ShellMateCLIDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
