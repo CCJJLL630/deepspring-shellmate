@@ -449,6 +449,15 @@ class AppViewModel: ObservableObject {
     }
   }
 
+  private func captureSafeOpenAIFailure(context: String) {
+    let safeError = NSError(
+      domain: "OpenAIRequest",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: context]
+    )
+    SentrySDK.capture(error: safeError)
+  }
+
   private func analyzeTerminalContent(
     text: String, source: String, changeIdentifiedAt: Double
   ) {
@@ -528,8 +537,8 @@ class AppViewModel: ObservableObject {
           return
         }
 
-        SentrySDK.capture(error: error)
-        print("DEBUG: Error getting or creating thread ID: \(error.localizedDescription)")
+        strongSelf.captureSafeOpenAIFailure(context: "Thread creation failed")
+        print("DEBUG: Error getting or creating thread ID.")
 
         if error.localizedDescription.contains("The network connection was lost")
           || error.localizedDescription.contains("The request timed out")
@@ -679,8 +688,8 @@ class AppViewModel: ObservableObject {
         return
       }
 
-      SentrySDK.capture(error: error)
-      print("Error processing message in thread: \(error.localizedDescription)")
+      captureSafeOpenAIFailure(context: "Suggestion request failed")
+      print("Error processing message in thread.")
 
       if error.localizedDescription.contains("The network connection was lost")
         || error.localizedDescription.contains("The request timed out")

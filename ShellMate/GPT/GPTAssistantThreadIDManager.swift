@@ -38,7 +38,9 @@ class GPTAssistantThreadIDManager {
       print("DEBUG: Created new thread ID for identifier \(identifier): \(createdThreadId)")
       return createdThreadId
     } catch {
-      print("DEBUG: Failed to create thread ID for identifier \(identifier) with error: \(error)")
+      // Provider and transport failures may echo authorization material. Keep the original typed
+      // error for control flow, but never serialize it into application logs.
+      print("DEBUG: Failed to create thread ID for identifier \(identifier).")
       throw error
     }
   }
